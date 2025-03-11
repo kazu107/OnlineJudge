@@ -1,0 +1,7 @@
+cd ..
+cd executor
+docker build -t executor .
+cd ..
+cd next-app
+npm install
+npm run dev
