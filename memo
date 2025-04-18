@@ -1,7 +1,9 @@
-cd ..
 cd executor
 docker build -t executor .
 cd ..
 cd next-app
 npm install
 npm run dev
+cd ..
+
+http://localhost:3000/problems/problem1

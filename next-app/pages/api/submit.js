@@ -15,11 +15,9 @@ export default async function handler(req, res) {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
 
-    // SSE の送信後すぐにフラッシュするヘルパー
+    // すぐにフラッシュするヘルパー
     const flush = () => {
-        if (res.flush) {
-            res.flush();
-        }
+        if (res.flush) res.flush();
     };
 
     const { problemId, language, code } = req.body;
@@ -33,7 +31,7 @@ export default async function handler(req, res) {
     // 一時ディレクトリ作成
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'submission-'));
 
-    // 言語に応じたファイル名を決定
+    // 言語に応じたファイル名決定
     let filename = '';
     switch (language) {
         case 'python': filename = 'solution.py'; break;
@@ -50,7 +48,7 @@ export default async function handler(req, res) {
     const solutionPath = path.join(tmpDir, filename);
     fs.writeFileSync(solutionPath, code);
 
-    // 問題の meta.json を読み込む
+    // 問題 meta.json の読み込み
     const metaPath = path.join(process.cwd(), 'problems', problemId, 'meta.json');
     if (!fs.existsSync(metaPath)) {
         res.write(`data: ${JSON.stringify({ error: 'Problem meta not found' })}\n\n`);
@@ -62,10 +60,8 @@ export default async function handler(req, res) {
     const testCases = meta.test_cases;
     const timeout = meta.timeout || 2000;
 
-    // 各テストケースを逐次処理
     for (let i = 0; i < testCases.length; i++) {
         const testCase = testCases[i];
-        // 入力ファイルの読み込み（テストケース名は入力ファイル名）
         const inputFilePath = path.join(process.cwd(), testCase.input);
         if (!fs.existsSync(inputFilePath)) {
             res.write(`data: ${JSON.stringify({
@@ -77,30 +73,24 @@ export default async function handler(req, res) {
             continue;
         }
         const inputContent = fs.readFileSync(inputFilePath, 'utf8');
-        // 一時ディレクトリに input.txt を作成
         fs.writeFileSync(path.join(tmpDir, 'input.txt'), inputContent);
 
-        // Docker コンテナ実行コマンド（run.sh 内で /usr/bin/time を利用）
+        // Docker コンテナ実行コマンド
         const dockerCmd = `docker run --rm -v ${tmpDir}:/code executor ${language} /code/${filename}`;
         try {
             let output = await execCommand(dockerCmd, timeout);
-            // 出力は通常のプログラム出力と最後の計測情報行が含まれる前提
             const lines = output.trim().split('\n');
             const lastLine = lines[lines.length - 1];
-            // 例: "TIME:0.12 MEM:2048"
+            // 正規表現を "TIME_MS:" に合わせる
             const timeRegex = /^TIME_MS:(\d+)\s+MEM:(\d+)$/;
             const match = lastLine.match(timeRegex);
-            console.log(lastLine);
             let execTimeMs = null, memUsage = null;
             if (match) {
-                const timeSec = parseFloat(match[1]);
-                execTimeMs = Math.round(timeSec);
+                execTimeMs = match[1];
                 memUsage = match[2];
                 lines.pop();
                 output = lines.join('\n').trim();
             }
-
-            // 期待出力の読み込み
             const expectedOutputPath = path.join(process.cwd(), testCase.output);
             if (!fs.existsSync(expectedOutputPath)) {
                 res.write(`data: ${JSON.stringify({
@@ -118,7 +108,7 @@ export default async function handler(req, res) {
                     testCase: path.basename(testCase.input),
                     status: 'Accepted',
                     time: execTimeMs,
-                    memory: memUsage,
+                    memory: memUsage
                 };
             } else {
                 testResult = {
@@ -127,13 +117,12 @@ export default async function handler(req, res) {
                     expected: expectedOutput,
                     got: output,
                     time: execTimeMs,
-                    memory: memUsage,
+                    memory: memUsage
                 };
             }
             res.write(`data: ${JSON.stringify(testResult)}\n\n`);
             flush();
         } catch (err) {
-            console.error(err);
             res.write(`data: ${JSON.stringify({
                 testCase: path.basename(testCase.input),
                 status: 'Error',
@@ -155,7 +144,6 @@ function execCommand(cmd, timeout) {
             if (error) {
                 reject(stderr || error.message);
             } else {
-                // /usr/bin/time の出力が stderr に含まれるため、stdout と stderr を結合して返す
                 resolve((stdout || '') + "\n" + (stderr || ''));
             }
         });
