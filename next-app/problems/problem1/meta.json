@@ -1,6 +1,7 @@
 {
   "problem_id": "problem1",
   "timeout": 2000,
+  "memory_limit_kb": 256000,
   "test_cases": [
     {
       "input": "problems/problem1/tests/input1.txt",
