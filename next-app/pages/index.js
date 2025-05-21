@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
+import path from 'path';
+import fs from 'fs';
 
-export default function Home() {
+export default function Home({ problems }) {
     const sampleCodes = {
         python: "print('Hello, World!')",
         cpp: `#include <iostream>
@@ -37,6 +40,7 @@ int main() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ code, language }),
         });
+        console.log(res);
         const data = await res.json();
         setResult(data.result);
     };
@@ -44,6 +48,14 @@ int main() {
     return (
         <div style={{ padding: '2rem' }}>
             <h1>多言語コード実行サンプル</h1>
+            <h2>問題一覧</h2>
+            <ul>
+                {problems.map((problem) => (
+                    <li key={problem}>
+                        <Link href={`/problems/${problem}`}>{problem}</Link>
+                    </li>
+                ))}
+            </ul>
             <form onSubmit={handleSubmit}>
                 <div>
                     <label>言語: </label>
@@ -74,4 +86,16 @@ int main() {
             </div>
         </div>
     );
+}
+
+export async function getStaticProps() {
+    const problemsDir = path.join(process.cwd(), 'problems');
+    const files = fs.readdirSync(problemsDir);
+    const problems = files.map(file => file.replace('.md', ''));
+
+    return {
+        props: {
+            problems,
+        },
+    };
 }
