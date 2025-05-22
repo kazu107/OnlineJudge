@@ -2,501 +2,420 @@
   "problem_id": "problem1",
   "timeout": 2000,
   "memory_limit_kb": 256000,
-  "test_cases": [
-    {
-      "input": "problems/problem1/tests/input1.txt",
-      "output": "problems/problem1/tests/output1.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input2.txt",
-      "output": "problems/problem1/tests/output2.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input3.txt",
-      "output": "problems/problem1/tests/output3.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input4.txt",
-      "output": "problems/problem1/tests/output4.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input5.txt",
-      "output": "problems/problem1/tests/output5.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input6.txt",
-      "output": "problems/problem1/tests/output6.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input7.txt",
-      "output": "problems/problem1/tests/output7.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input8.txt",
-      "output": "problems/problem1/tests/output8.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input9.txt",
-      "output": "problems/problem1/tests/output9.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input10.txt",
-      "output": "problems/problem1/tests/output10.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input11.txt",
-      "output": "problems/problem1/tests/output11.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input12.txt",
-      "output": "problems/problem1/tests/output12.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input13.txt",
-      "output": "problems/problem1/tests/output13.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input14.txt",
-      "output": "problems/problem1/tests/output14.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input15.txt",
-      "output": "problems/problem1/tests/output15.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input16.txt",
-      "output": "problems/problem1/tests/output16.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input17.txt",
-      "output": "problems/problem1/tests/output17.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input18.txt",
-      "output": "problems/problem1/tests/output18.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input19.txt",
-      "output": "problems/problem1/tests/output19.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input20.txt",
-      "output": "problems/problem1/tests/output20.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input21.txt",
-      "output": "problems/problem1/tests/output21.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input22.txt",
-      "output": "problems/problem1/tests/output22.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input23.txt",
-      "output": "problems/problem1/tests/output23.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input24.txt",
-      "output": "problems/problem1/tests/output24.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input25.txt",
-      "output": "problems/problem1/tests/output25.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input26.txt",
-      "output": "problems/problem1/tests/output26.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input27.txt",
-      "output": "problems/problem1/tests/output27.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input28.txt",
-      "output": "problems/problem1/tests/output28.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input29.txt",
-      "output": "problems/problem1/tests/output29.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input30.txt",
-      "output": "problems/problem1/tests/output30.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input31.txt",
-      "output": "problems/problem1/tests/output31.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input32.txt",
-      "output": "problems/problem1/tests/output32.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input33.txt",
-      "output": "problems/problem1/tests/output33.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input34.txt",
-      "output": "problems/problem1/tests/output34.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input35.txt",
-      "output": "problems/problem1/tests/output35.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input36.txt",
-      "output": "problems/problem1/tests/output36.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input37.txt",
-      "output": "problems/problem1/tests/output37.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input38.txt",
-      "output": "problems/problem1/tests/output38.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input39.txt",
-      "output": "problems/problem1/tests/output39.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input40.txt",
-      "output": "problems/problem1/tests/output40.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input41.txt",
-      "output": "problems/problem1/tests/output41.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input42.txt",
-      "output": "problems/problem1/tests/output42.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input43.txt",
-      "output": "problems/problem1/tests/output43.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input44.txt",
-      "output": "problems/problem1/tests/output44.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input45.txt",
-      "output": "problems/problem1/tests/output45.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input46.txt",
-      "output": "problems/problem1/tests/output46.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input47.txt",
-      "output": "problems/problem1/tests/output47.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input48.txt",
-      "output": "problems/problem1/tests/output48.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input49.txt",
-      "output": "problems/problem1/tests/output49.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input50.txt",
-      "output": "problems/problem1/tests/output50.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input51.txt",
-      "output": "problems/problem1/tests/output51.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input52.txt",
-      "output": "problems/problem1/tests/output52.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input53.txt",
-      "output": "problems/problem1/tests/output53.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input54.txt",
-      "output": "problems/problem1/tests/output54.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input55.txt",
-      "output": "problems/problem1/tests/output55.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input56.txt",
-      "output": "problems/problem1/tests/output56.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input57.txt",
-      "output": "problems/problem1/tests/output57.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input58.txt",
-      "output": "problems/problem1/tests/output58.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input59.txt",
-      "output": "problems/problem1/tests/output59.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input60.txt",
-      "output": "problems/problem1/tests/output60.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input61.txt",
-      "output": "problems/problem1/tests/output61.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input62.txt",
-      "output": "problems/problem1/tests/output62.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input63.txt",
-      "output": "problems/problem1/tests/output63.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input64.txt",
-      "output": "problems/problem1/tests/output64.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input65.txt",
-      "output": "problems/problem1/tests/output65.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input66.txt",
-      "output": "problems/problem1/tests/output66.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input67.txt",
-      "output": "problems/problem1/tests/output67.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input68.txt",
-      "output": "problems/problem1/tests/output68.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input69.txt",
-      "output": "problems/problem1/tests/output69.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input70.txt",
-      "output": "problems/problem1/tests/output70.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input71.txt",
-      "output": "problems/problem1/tests/output71.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input72.txt",
-      "output": "problems/problem1/tests/output72.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input73.txt",
-      "output": "problems/problem1/tests/output73.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input74.txt",
-      "output": "problems/problem1/tests/output74.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input75.txt",
-      "output": "problems/problem1/tests/output75.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input76.txt",
-      "output": "problems/problem1/tests/output76.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input77.txt",
-      "output": "problems/problem1/tests/output77.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input78.txt",
-      "output": "problems/problem1/tests/output78.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input79.txt",
-      "output": "problems/problem1/tests/output79.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input80.txt",
-      "output": "problems/problem1/tests/output80.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input81.txt",
-      "output": "problems/problem1/tests/output81.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input82.txt",
-      "output": "problems/problem1/tests/output82.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input83.txt",
-      "output": "problems/problem1/tests/output83.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input84.txt",
-      "output": "problems/problem1/tests/output84.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input85.txt",
-      "output": "problems/problem1/tests/output85.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input86.txt",
-      "output": "problems/problem1/tests/output86.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input87.txt",
-      "output": "problems/problem1/tests/output87.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input88.txt",
-      "output": "problems/problem1/tests/output88.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input89.txt",
-      "output": "problems/problem1/tests/output89.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input90.txt",
-      "output": "problems/problem1/tests/output90.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input91.txt",
-      "output": "problems/problem1/tests/output91.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input92.txt",
-      "output": "problems/problem1/tests/output92.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input93.txt",
-      "output": "problems/problem1/tests/output93.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input94.txt",
-      "output": "problems/problem1/tests/output94.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input95.txt",
-      "output": "problems/problem1/tests/output95.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input96.txt",
-      "output": "problems/problem1/tests/output96.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input97.txt",
-      "output": "problems/problem1/tests/output97.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input98.txt",
-      "output": "problems/problem1/tests/output98.txt",
-      "points": 100
-    },
-    {
-      "input": "problems/problem1/tests/input99.txt",
-      "output": "problems/problem1/tests/output99.txt",
-      "points": 100
+  "test_case_categories": [
+    {
+      "category_name": "Sample Cases",
+      "points": 10,
+      "test_cases": [
+        {
+          "input": "problems/problem1/tests/input/input1.txt",
+          "output": "problems/problem1/tests/output/output1.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input2.txt",
+          "output": "problems/problem1/tests/output/output2.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input3.txt",
+          "output": "problems/problem1/tests/output/output3.txt"
+        }
+      ]
+    },
+    {
+      "category_name": "General Cases",
+      "points": 60,
+      "test_cases": [
+        {
+          "input": "problems/problem1/tests/input/input4.txt",
+          "output": "problems/problem1/tests/output/output4.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input5.txt",
+          "output": "problems/problem1/tests/output/output5.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input6.txt",
+          "output": "problems/problem1/tests/output/output6.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input7.txt",
+          "output": "problems/problem1/tests/output/output7.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input8.txt",
+          "output": "problems/problem1/tests/output/output8.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input9.txt",
+          "output": "problems/problem1/tests/output/output9.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input10.txt",
+          "output": "problems/problem1/tests/output/output10.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input11.txt",
+          "output": "problems/problem1/tests/output/output11.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input12.txt",
+          "output": "problems/problem1/tests/output/output12.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input13.txt",
+          "output": "problems/problem1/tests/output/output13.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input14.txt",
+          "output": "problems/problem1/tests/output/output14.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input15.txt",
+          "output": "problems/problem1/tests/output/output15.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input16.txt",
+          "output": "problems/problem1/tests/output/output16.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input17.txt",
+          "output": "problems/problem1/tests/output/output17.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input18.txt",
+          "output": "problems/problem1/tests/output/output18.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input19.txt",
+          "output": "problems/problem1/tests/output/output19.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input20.txt",
+          "output": "problems/problem1/tests/output/output20.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input21.txt",
+          "output": "problems/problem1/tests/output/output21.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input22.txt",
+          "output": "problems/problem1/tests/output/output22.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input23.txt",
+          "output": "problems/problem1/tests/output/output23.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input24.txt",
+          "output": "problems/problem1/tests/output/output24.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input25.txt",
+          "output": "problems/problem1/tests/output/output25.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input26.txt",
+          "output": "problems/problem1/tests/output/output26.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input27.txt",
+          "output": "problems/problem1/tests/output/output27.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input28.txt",
+          "output": "problems/problem1/tests/output/output28.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input29.txt",
+          "output": "problems/problem1/tests/output/output29.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input30.txt",
+          "output": "problems/problem1/tests/output/output30.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input31.txt",
+          "output": "problems/problem1/tests/output/output31.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input32.txt",
+          "output": "problems/problem1/tests/output/output32.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input33.txt",
+          "output": "problems/problem1/tests/output/output33.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input34.txt",
+          "output": "problems/problem1/tests/output/output34.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input35.txt",
+          "output": "problems/problem1/tests/output/output35.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input36.txt",
+          "output": "problems/problem1/tests/output/output36.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input37.txt",
+          "output": "problems/problem1/tests/output/output37.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input38.txt",
+          "output": "problems/problem1/tests/output/output38.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input39.txt",
+          "output": "problems/problem1/tests/output/output39.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input40.txt",
+          "output": "problems/problem1/tests/output/output40.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input41.txt",
+          "output": "problems/problem1/tests/output/output41.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input42.txt",
+          "output": "problems/problem1/tests/output/output42.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input43.txt",
+          "output": "problems/problem1/tests/output/output43.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input44.txt",
+          "output": "problems/problem1/tests/output/output44.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input45.txt",
+          "output": "problems/problem1/tests/output/output45.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input46.txt",
+          "output": "problems/problem1/tests/output/output46.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input47.txt",
+          "output": "problems/problem1/tests/output/output47.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input48.txt",
+          "output": "problems/problem1/tests/output/output48.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input49.txt",
+          "output": "problems/problem1/tests/output/output49.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input50.txt",
+          "output": "problems/problem1/tests/output/output50.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input51.txt",
+          "output": "problems/problem1/tests/output/output51.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input52.txt",
+          "output": "problems/problem1/tests/output/output52.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input53.txt",
+          "output": "problems/problem1/tests/output/output53.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input54.txt",
+          "output": "problems/problem1/tests/output/output54.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input55.txt",
+          "output": "problems/problem1/tests/output/output55.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input56.txt",
+          "output": "problems/problem1/tests/output/output56.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input57.txt",
+          "output": "problems/problem1/tests/output/output57.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input58.txt",
+          "output": "problems/problem1/tests/output/output58.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input59.txt",
+          "output": "problems/problem1/tests/output/output59.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input60.txt",
+          "output": "problems/problem1/tests/output/output60.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input61.txt",
+          "output": "problems/problem1/tests/output/output61.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input62.txt",
+          "output": "problems/problem1/tests/output/output62.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input63.txt",
+          "output": "problems/problem1/tests/output/output63.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input64.txt",
+          "output": "problems/problem1/tests/output/output64.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input65.txt",
+          "output": "problems/problem1/tests/output/output65.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input66.txt",
+          "output": "problems/problem1/tests/output/output66.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input67.txt",
+          "output": "problems/problem1/tests/output/output67.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input68.txt",
+          "output": "problems/problem1/tests/output/output68.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input69.txt",
+          "output": "problems/problem1/tests/output/output69.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input70.txt",
+          "output": "problems/problem1/tests/output/output70.txt"
+        }
+      ]
+    },
+    {
+      "category_name": "Large Input Cases",
+      "points": 30,
+      "test_cases": [
+        {
+          "input": "problems/problem1/tests/input/input71.txt",
+          "output": "problems/problem1/tests/output/output71.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input72.txt",
+          "output": "problems/problem1/tests/output/output72.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input73.txt",
+          "output": "problems/problem1/tests/output/output73.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input74.txt",
+          "output": "problems/problem1/tests/output/output74.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input75.txt",
+          "output": "problems/problem1/tests/output/output75.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input76.txt",
+          "output": "problems/problem1/tests/output/output76.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input77.txt",
+          "output": "problems/problem1/tests/output/output77.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input78.txt",
+          "output": "problems/problem1/tests/output/output78.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input79.txt",
+          "output": "problems/problem1/tests/output/output79.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input80.txt",
+          "output": "problems/problem1/tests/output/output80.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input81.txt",
+          "output": "problems/problem1/tests/output/output81.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input82.txt",
+          "output": "problems/problem1/tests/output/output82.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input83.txt",
+          "output": "problems/problem1/tests/output/output83.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input84.txt",
+          "output": "problems/problem1/tests/output/output84.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input85.txt",
+          "output": "problems/problem1/tests/output/output85.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input86.txt",
+          "output": "problems/problem1/tests/output/output86.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input87.txt",
+          "output": "problems/problem1/tests/output/output87.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input88.txt",
+          "output": "problems/problem1/tests/output/output88.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input89.txt",
+          "output": "problems/problem1/tests/output/output89.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input90.txt",
+          "output": "problems/problem1/tests/output/output90.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input91.txt",
+          "output": "problems/problem1/tests/output/output91.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input92.txt",
+          "output": "problems/problem1/tests/output/output92.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input93.txt",
+          "output": "problems/problem1/tests/output/output93.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input94.txt",
+          "output": "problems/problem1/tests/output/output94.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input95.txt",
+          "output": "problems/problem1/tests/output/output95.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input96.txt",
+          "output": "problems/problem1/tests/output/output96.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input97.txt",
+          "output": "problems/problem1/tests/output/output97.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input98.txt",
+          "output": "problems/problem1/tests/output/output98.txt"
+        },
+        {
+          "input": "problems/problem1/tests/input/input99.txt",
+          "output": "problems/problem1/tests/output/output99.txt"
+        }
+      ]
     }
   ]
 }
