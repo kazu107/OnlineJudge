@@ -59,15 +59,22 @@ export default function ProblemPage({ id, statementContent, explanationContent }
     const [activeTab, setActiveTab] = useState('problem');
     const [language, setLanguage] = useState('python');
     const [code, setCode] = useState('');
-    // results を配列で管理（逐次追加）
-    const [results, setResults] = useState([]);
+    
+    // Updated state variables for category-based results
+    const [testCaseResults, setTestCaseResults] = useState([]); // Individual test case results
+    const [categoryResults, setCategoryResults] = useState({}); // { categoryName: { earned: 0, max: 0, allPassed: false }, ... }
+    const [finalResult, setFinalResult] = useState(null); // { total_earned: 0, max_total: 0, summary: [] }
+    
     const [submitting, setSubmitting] = useState(false);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        setResults([]); // 前回結果クリア
+        // Clear previous results
+        setTestCaseResults([]);
+        setCategoryResults({});
+        setFinalResult(null);
+        
         setSubmitting(true);
-        // 提出ボタン押下直後に提出結果タブに切替え
         setActiveTab('result');
 
         // POST 提出を fetch で実行。レスポンスは SSE 形式のストリーム
@@ -101,21 +108,53 @@ export default function ProblemPage({ id, statementContent, explanationContent }
                         const jsonStr = line.replace(/^data:\s*/, '');
                         try {
                             const event = JSON.parse(jsonStr);
-                            // finished イベントが送られたら提出終了
-                            if (event.finished) {
+                            const event = JSON.parse(jsonStr);
+
+                            if (event.type === 'test_case_result') {
+                                setTestCaseResults(prev => [...prev, event]);
+                            } else if (event.type === 'category_result') {
+                                setCategoryResults(prev => ({
+                                    ...prev,
+                                    [event.category_name]: {
+                                        earned: event.category_points_earned,
+                                        max: event.category_max_points,
+                                        allPassed: event.all_tests_in_category_passed
+                                    }
+                                }));
+                            } else if (event.type === 'final_result') {
+                                setFinalResult({
+                                    total_earned: event.total_points_earned,
+                                    max_total: event.max_total_points,
+                                    summary: event.category_summary // Store summary for rendering order
+                                });
+                                setSubmitting(false); // Submission processing finished
+                            } else if (event.error) { // Handle backend error messages
+                                console.error('Backend error event:', event.error);
+                                // Optionally, display this error to the user
+                                // For example, by adding to a new state like `submissionError`
+                                setFinalResult({ error: event.error }); // Indicate error in final result
                                 setSubmitting(false);
-                            } else {
-                                // 新しいテストケース結果を state に追加
-                                setResults(prev => [...prev, event]);
                             }
                         } catch (err) {
-                            console.error('Failed to parse SSE event:', err);
+                            console.error('Failed to parse SSE event:', jsonStr, err);
                         }
                     }
                 }
             });
         }
-        setSubmitting(false);
+        // If loop finishes but submitting is still true (e.g. stream ended abruptly before final_result)
+        if (submitting) {
+             setSubmitting(false);
+             console.warn("SSE stream finished without a final_result event.");
+        }
+    };
+    
+    // Helper to get category display order from finalResult or fallback to categoryResults keys
+    const getCategoryOrder = () => {
+        if (finalResult && finalResult.summary) {
+            return finalResult.summary.map(cat => cat.category_name);
+        }
+        return Object.keys(categoryResults);
     };
 
     return (
@@ -189,29 +228,90 @@ export default function ProblemPage({ id, statementContent, explanationContent }
                     {activeTab === 'result' && (
                         <div>
                             <h2>提出結果</h2>
-                            {results.length > 0 ? (
-                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                                    <thead>
-                                    <tr>
-                                        <th style={{ border: '1px solid #ccc', padding: '0.5rem' }}>テストケース名</th>
-                                        <th style={{ border: '1px solid #ccc', padding: '0.5rem' }}>結果</th>
-                                        <th style={{ border: '1px solid #ccc', padding: '0.5rem' }}>実行時間 (ms)</th>
-                                        <th style={{ border: '1px solid #ccc', padding: '0.5rem' }}>メモリ使用量 (KB)</th>
-                                    </tr>
-                                    </thead>
-                                    <tbody>
-                                    {results.map((tc, index) => (
-                                        <tr key={index}>
-                                            <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{tc.testCase}</td>
-                                            <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{tc.status}</td>
-                                            <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{tc.time}</td>
-                                            <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{tc.memory}</td>
-                                        </tr>
-                                    ))}
-                                    </tbody>
-                                </table>
-                            ) : (
-                                <p>{submitting ? '判定中…' : 'まだ結果がありません。'}</p>
+                            {submitting && testCaseResults.length === 0 && !finalResult && <p>判定中…</p>}
+                            
+                            {finalResult && finalResult.error && (
+                                <div style={{ padding: '1rem', backgroundColor: '#ffdddd', border: '1px solid #ff0000', borderRadius: '5px', color: '#D8000C'}}>
+                                    <p><strong>エラーが発生しました:</strong> {typeof finalResult.error === 'object' ? JSON.stringify(finalResult.error) : finalResult.error}</p>
+                                </div>
+                            )}
+
+                            {finalResult && finalResult.total_earned !== undefined && (
+                                <div style={{ margin: '1rem 0', padding: '1rem', backgroundColor: '#e6f7ff', border: '1px solid #91d5ff', borderRadius: '5px' }}>
+                                    <h3>総合得点: {finalResult.total_earned} / {finalResult.max_total_points} 点</h3>
+                                </div>
+                            )}
+
+                            {getCategoryOrder().map(categoryName => {
+                                const categoryData = categoryResults[categoryName];
+                                const categorySummary = finalResult?.summary?.find(s => s.category_name === categoryName);
+                                const earnedPoints = categorySummary?.points_earned ?? categoryData?.earned ?? 0;
+                                const maxPoints = categorySummary?.max_points ?? categoryData?.max ?? 0;
+                                const allPassed = categoryData?.allPassed ?? (earnedPoints === maxPoints && maxPoints > 0);
+
+                                const categoryHeaderStyle = {
+                                    padding: '0.8rem',
+                                    marginTop: '1rem',
+                                    border: '1px solid #ddd',
+                                    borderRadius: '5px 5px 0 0',
+                                    backgroundColor: allPassed ? '#d4edda' : (categoryData ? '#f8d7da' : '#e9ecef'), // Green if all passed, Red if processed and failed, Grey if not yet processed
+                                    color: allPassed ? '#155724' : (categoryData ? '#721c24' : '#495057'),
+                                    borderBottom: 'none'
+                                };
+                                
+                                return (
+                                    <div key={categoryName} style={{ marginBottom: '1rem' }}>
+                                        <div style={categoryHeaderStyle}>
+                                            <h4>{categoryName}: {earnedPoints} / {maxPoints} 点</h4>
+                                        </div>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #ddd' }}>
+                                            <thead>
+                                                <tr>
+                                                    <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa' }}>テストケース名</th>
+                                                    <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa' }}>結果</th>
+                                                    <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa' }}>実行時間 (ms)</th>
+                                                    <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa' }}>メモリ (KB)</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {testCaseResults.filter(tc => tc.category_name === categoryName).map((tc, index) => (
+                                                    <tr key={index} style={{ backgroundColor: index % 2 === 0 ? '#fff' : '#f9f9f9' }}>
+                                                        <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{tc.testCase}</td>
+                                                        <td style={{ border: '1px solid #ccc', padding: '0.5rem', color: tc.status === 'Accepted' ? 'green' : (tc.status === 'Wrong Answer' || tc.status === 'TLE' || tc.status === 'MLE' ? 'red' : 'inherit') }}>
+                                                            {tc.status}
+                                                            {tc.status === 'Wrong Answer' && (
+                                                                <div style={{fontSize: '0.8em', whiteSpace: 'pre-wrap', maxHeight: '100px', overflowY: 'auto', backgroundColor: '#fff0f0', padding: '5px', marginTop: '5px'}}>
+                                                                    <p style={{margin:0}}>Expected: {tc.expected}</p>
+                                                                    <p style={{margin:0}}>Got: {tc.got}</p>
+                                                                </div>
+                                                            )}
+                                                            {(tc.status === 'TLE' || tc.status === 'MLE') && tc.got && (
+                                                                 <div style={{fontSize: '0.8em', whiteSpace: 'pre-wrap', maxHeight: '100px', overflowY: 'auto', backgroundColor: '#fff0f0', padding: '5px', marginTop: '5px'}}>
+                                                                    <p style={{margin:0}}>Output: {tc.got}</p>
+                                                                </div>
+                                                            )}
+                                                            {tc.status === 'Error' && tc.message && (
+                                                                <div style={{fontSize: '0.8em', whiteSpace: 'pre-wrap', maxHeight: '100px', overflowY: 'auto', backgroundColor: '#fff0f0', padding: '5px', marginTop: '5px'}}>
+                                                                    <p style={{margin:0}}>Error: {tc.message}</p>
+                                                                </div>
+                                                            )}
+                                                        </td>
+                                                        <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{tc.time ?? '-'}</td>
+                                                        <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{tc.memory ?? '-'}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                        {testCaseResults.filter(tc => tc.category_name === categoryName).length === 0 && !submitting && (
+                                            <div style={{padding: '0.5rem', textAlign: 'center', border: '1px solid #ddd', borderTop:'none', backgroundColor: '#fff'}}>
+                                                <p>このカテゴリーのテストケース結果はまだありません。</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                            {!submitting && testCaseResults.length === 0 && !finalResult && (
+                                <p>まだ結果がありません。</p>
                             )}
                         </div>
                     )}
