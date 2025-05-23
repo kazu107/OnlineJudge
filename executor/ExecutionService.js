@@ -382,6 +382,408 @@ class ExecutionService {
         }
         return result;
     }
+
+    async startInteractiveSession(userCodeOptions, evaluatorOptions, timeLimitMs, memoryLimitKb, tempDir) {
+        // TODO: Implement interactive evaluation logic
+        // userCodeOptions: { language, code, executablePath }
+        // evaluatorOptions: { scriptPath, language, startupDataForEvaluator }
+        // timeLimitMs, memoryLimitKb for user's program
+
+        const langDefUser = this.languageDefinitions[userCodeOptions.language];
+        if (!langDefUser) {
+            return { 
+                status: 'Error', 
+                message: `User language '${userCodeOptions.language}' is not supported.`,
+                interaction_log: [],
+                durationMs: 0,
+                memoryKb: 0,
+                user_stderr: '',
+                evaluator_stderr: ''
+            };
+        }
+
+        const langDefEvaluator = this.languageDefinitions[evaluatorOptions.language];
+        if (!langDefEvaluator) {
+            return {
+                status: 'Error',
+                message: `Evaluator language '${evaluatorOptions.language}' is not supported.`,
+                interaction_log: [],
+                durationMs: 0,
+                memoryKb: 0,
+                user_stderr: '',
+                evaluator_stderr: ''
+            };
+        }
+
+        let userExecutablePath = userCodeOptions.executablePath;
+        let userCompileError = null;
+
+        // 2.a. User Program Preparation
+        if (userCodeOptions.code) {
+            if (!langDefUser.needs_compilation) {
+                const sourceFileName = `source${langDefUser.source_file_extension}`;
+                userExecutablePath = path.join(tempDir, sourceFileName);
+                try {
+                    await fs.writeFile(userExecutablePath, userCodeOptions.code);
+                } catch (writeError) {
+                    return {
+                        status: 'Error',
+                        message: `Failed to write user source code: ${writeError.message}`,
+                        interaction_log: [], durationMs: 0, memoryKb: 0, user_stderr: '', evaluator_stderr: ''
+                    };
+                }
+            } else {
+                try {
+                    // Give compilation a bit more time, similar to executeCode
+                    const compileResult = await this.compile(userCodeOptions.language, userCodeOptions.code, tempDir, Math.max(timeLimitMs, 10000));
+                    if (!compileResult.compilationSuccess) {
+                        // This structure is based on how compile() rejects
+                        userCompileError = {
+                            status: 'CompileError',
+                            message: compileResult.message || 'User code compilation failed.',
+                            user_stderr: compileResult.stderr || '',
+                            evaluator_stderr: '',
+                            interaction_log: [],
+                            durationMs: compileResult.durationMs || 0,
+                            memoryKb: 0,
+                        };
+                    }
+                    userExecutablePath = compileResult.executablePath;
+                } catch (err) { // Catch errors from compile()
+                    userCompileError = {
+                        status: 'CompileError',
+                        message: err.message || 'User code compilation failed unexpectedly.',
+                        user_stderr: err.stderr || '',
+                        evaluator_stderr: '',
+                        interaction_log: [],
+                        durationMs: err.durationMs || 0,
+                        memoryKb: 0,
+                    };
+                }
+            }
+        }
+
+        if (userCompileError) {
+            return userCompileError;
+        }
+
+        if (!userExecutablePath) {
+            return {
+                status: 'Error',
+                message: 'User executable path is missing after preparation.',
+                interaction_log: [], durationMs: 0, memoryKb: 0, user_stderr: '', evaluator_stderr: ''
+            };
+        }
+        
+        // Ensure user executable exists if path was provided directly
+        if (userCodeOptions.executablePath) {
+            try {
+                await fs.access(userExecutablePath);
+            } catch (accessError) {
+                 return {
+                    status: 'Error',
+                    message: `User executable path not found or not accessible: ${userExecutablePath}`,
+                    interaction_log: [], durationMs: 0, memoryKb: 0, user_stderr: '', evaluator_stderr: ''
+                };
+            }
+        }
+
+
+        // 2.b. Evaluator Preparation
+        const [evaluatorCommand, ...evaluatorArgsBase] = langDefEvaluator.get_execution_command(evaluatorOptions.scriptPath);
+        let evaluatorArgs = [...evaluatorArgsBase];
+
+        // Handle startupDataForEvaluator - simplistic approach: pass as first arg if present
+        // A more robust solution might involve environment variables or specific evaluator script design
+        if (evaluatorOptions.startupDataForEvaluator) {
+            evaluatorArgs.push(evaluatorOptions.startupDataForEvaluator);
+        }
+        
+        const interaction_log = [];
+        let userProgram, evaluatorScript;
+        let user_stderr = '', evaluator_stderr = '';
+        let finalStatus = 'Pending'; // Possible values: Accepted, WrongAnswer, RuntimeError, TimeLimitExceeded, MemoryLimitExceeded, EvaluatorError, InternalError
+        let finalMessage = '';
+        let userDurationMs = 0;
+        let userMemoryKb = 0;
+
+        const cleanupProcesses = (signal = 'SIGKILL') => {
+            if (userProgram && userProgram.pid && !userProgram.killed) {
+                try {
+                    if (os.platform() === 'win32') {
+                        exec(`taskkill /PID ${userProgram.pid} /F /T`);
+                    } else {
+                        process.kill(-userProgram.pid, signal); // Kill process group
+                    }
+                } catch (e) { /* ignore */ }
+                try { userProgram.kill(signal); } catch (e) { /* ignore */ }
+            }
+            if (evaluatorScript && evaluatorScript.pid && !evaluatorScript.killed) {
+                try { evaluatorScript.kill(signal); } catch (e) { /* ignore */ }
+            }
+        };
+        
+        return new Promise(async (resolve) => {
+            // 3.c. Spawning User Program (adapted from run method)
+            const [userCmd, ...userArgs] = langDefUser.get_execution_command(userExecutablePath);
+            const cpuTimeLimitS = Math.ceil(timeLimitMs / 1000);
+            const isWindows = os.platform() === 'win32';
+            let userShellCommand = '';
+            let userSpawnOptions = { cwd: tempDir, detached: !isWindows, stdio: ['pipe', 'pipe', 'pipe'] };
+
+            if (isWindows) {
+                userShellCommand = userCmd;
+                userSpawnOptions.shell = false;
+                if (userArgs.length > 0) userSpawnOptions.args = userArgs;
+            } else {
+                const escapedCommand = userCmd.replace(/"/g, '\\"');
+                const escapedArgs = userArgs.map(arg => arg.replace(/"/g, '\\"'));
+                userShellCommand = `ulimit -S -v ${memoryLimitKb} -S -t ${cpuTimeLimitS}; exec "${escapedCommand}"`;
+                if (escapedArgs.length > 0) {
+                    userShellCommand += ` "${escapedArgs.join('" "')}"`;
+                }
+                userSpawnOptions.shell = true;
+            }
+
+            const userStartTime = Date.now();
+            userProgram = spawn(userShellCommand, isWindows ? userArgs : [], userSpawnOptions);
+
+            let userTimedOut = false;
+            let userMemoryExceeded = false;
+            let maxMemoryUsageKb = 0;
+            let psInterval;
+
+            const userTimer = setTimeout(() => {
+                userTimedOut = true;
+                finalStatus = 'TimeLimitExceeded';
+                finalMessage = 'User program exceeded time limit.';
+                cleanupProcesses('SIGKILL'); // Force kill
+            }, timeLimitMs);
+
+            if (!isWindows && userProgram.pid) {
+                psInterval = setInterval(async () => {
+                    if (!userProgram || userProgram.killed || userProgram.exitCode !== null) {
+                        clearInterval(psInterval);
+                        return;
+                    }
+                    try {
+                        const { stdout: psStdout } = await new Promise((res, rej) => 
+                            exec(`ps -o rss= -p ${userProgram.pid}`, (err, ps_stdout) => err ? rej(err) : res({stdout: ps_stdout}))
+                        );
+                        const currentMemoryKb = parseInt(psStdout.trim(), 10);
+                        if (!isNaN(currentMemoryKb)) {
+                            maxMemoryUsageKb = Math.max(maxMemoryUsageKb, currentMemoryKb);
+                            if (currentMemoryKb > memoryLimitKb) {
+                                userMemoryExceeded = true;
+                                finalStatus = 'MemoryLimitExceeded';
+                                finalMessage = 'User program exceeded memory limit.';
+                                cleanupProcesses('SIGKILL'); // Force kill
+                            }
+                        }
+                    } catch (err) { // Process might have exited
+                        clearInterval(psInterval);
+                    }
+                }, 200);
+            }
+
+            // 3.c. Spawning Evaluator Script
+            // For now, evaluator has a more generous timeout (e.g., timeLimitMs + 5s) or no specific limit from this script.
+            // Its resource usage is not strictly monitored by this service.
+            evaluatorScript = spawn(evaluatorCommand, evaluatorArgs, { cwd: tempDir, stdio: ['pipe', 'pipe', 'pipe'] });
+            
+            // Error handling for spawns
+            userProgram.on('error', (err) => {
+                if (finalStatus !== 'Pending') return; // Already determined by TLE/MLE or other event
+                finalStatus = 'RuntimeError';
+                finalMessage = `User program failed to start: ${err.message}`;
+                user_stderr += `\nUser program spawn error: ${err.message}`;
+                cleanupProcesses();
+                clearTimeout(userTimer);
+                if (psInterval) clearInterval(psInterval);
+                resolveInteraction();
+            });
+
+            evaluatorScript.on('error', (err) => {
+                if (finalStatus !== 'Pending') return;
+                finalStatus = 'EvaluatorError';
+                finalMessage = `Evaluator script failed to start: ${err.message}`;
+                evaluator_stderr += `\nEvaluator script spawn error: ${err.message}`;
+                cleanupProcesses();
+                clearTimeout(userTimer);
+                if (psInterval) clearInterval(psInterval);
+                resolveInteraction();
+            });
+
+
+            // 3.d. Interactive Loop & Piping & 3.e. Interaction Log
+            userProgram.stdout.on('data', (data) => {
+                const textData = data.toString();
+                interaction_log.push({ source: 'user', data: textData, timestamp: Date.now() });
+                if (evaluatorScript && !evaluatorScript.stdin.destroyed) {
+                    try {
+                        evaluatorScript.stdin.write(data);
+                    } catch (e) {
+                        console.error("Error writing to evaluator stdin:", e);
+                        // Potentially an error condition, evaluator might have closed stdin
+                    }
+                }
+            });
+
+            evaluatorScript.stdout.on('data', (data) => {
+                const textData = data.toString();
+                interaction_log.push({ source: 'evaluator', data: textData, timestamp: Date.now() });
+
+                // Check for AC/WA signals
+                if (textData.includes('__AC__')) {
+                    if (finalStatus === 'Pending') { // Ensure not already TLE/MLE etc.
+                        finalStatus = 'Accepted';
+                        finalMessage = textData.substring(textData.indexOf('__AC__') + 6).trim();
+                    }
+                    cleanupProcesses(); // Signal evaluator to stop, then user program
+                } else if (textData.includes('__WA__')) {
+                     if (finalStatus === 'Pending') {
+                        finalStatus = 'WrongAnswer';
+                        finalMessage = textData.substring(textData.indexOf('__WA__') + 6).trim();
+                    }
+                    cleanupProcesses();
+                } else {
+                    if (userProgram && !userProgram.stdin.destroyed) {
+                        try {
+                            userProgram.stdin.write(data);
+                        } catch (e) {
+                            console.error("Error writing to user program stdin:", e);
+                            // User program might have closed stdin
+                        }
+                    }
+                }
+            });
+
+            userProgram.stderr.on('data', (data) => {
+                user_stderr += data.toString();
+                interaction_log.push({ source: 'user_stderr', data: data.toString(), timestamp: Date.now() });
+            });
+            evaluatorScript.stderr.on('data', (data) => {
+                evaluator_stderr += data.toString();
+                interaction_log.push({ source: 'evaluator_stderr', data: data.toString(), timestamp: Date.now() });
+            });
+            
+            // Monitoring Exit
+            let userExited = false;
+            let evaluatorExited = false;
+
+            userProgram.on('close', (code, signal) => {
+                userExited = true;
+                userDurationMs = Date.now() - userStartTime;
+                userMemoryKb = maxMemoryUsageKb; // Capture memory usage
+                clearTimeout(userTimer);
+                if (psInterval) clearInterval(psInterval);
+
+                if (finalStatus === 'Pending') { // Not yet decided by TLE, MLE, or evaluator signal
+                    if (userTimedOut) { // Should have been caught by timer, but as a fallback
+                        finalStatus = 'TimeLimitExceeded';
+                        finalMessage = 'User program exceeded time limit.';
+                    } else if (userMemoryExceeded) {
+                        finalStatus = 'MemoryLimitExceeded';
+                        finalMessage = 'User program exceeded memory limit.';
+                    } else if (code === 0 && !signal) {
+                        // User program exited cleanly, but evaluator didn't signal AC/WA yet.
+                        // This could be WA if evaluator is still running and waiting for more input.
+                        // Or, if evaluator also exited, it depends on evaluator's state.
+                        if (!evaluatorExited) finalStatus = 'WrongAnswer'; // Assume WA if evaluator expects more
+                        finalMessage = finalMessage || 'User program exited successfully but no AC/WA from evaluator.';
+                    } else {
+                        finalStatus = 'RuntimeError';
+                        finalMessage = `User program exited with code ${code}, signal ${signal}.`;
+                        if (signal) user_stderr += `\nUser program terminated by signal: ${signal}`;
+                    }
+                }
+                // If user program exits, evaluator should also be stopped unless it already exited.
+                if (!evaluatorExited) {
+                    try { evaluatorScript.stdin.end(); } catch(e) {/* ignore */} // Signal no more input
+                }
+                checkAndResolve();
+            });
+
+            evaluatorScript.on('close', (code, signal) => {
+                evaluatorExited = true;
+                if (finalStatus === 'Pending') { // Not yet decided by user TLE/MLE or explicit evaluator AC/WA via stdout
+                    if (code === 0 && !signal) {
+                        // Evaluator exited cleanly, but didn't send AC/WA signal.
+                        // This is unusual if protocol relies on __AC__/__WA__ in stdout. Could be EvaluatorError.
+                        finalStatus = 'EvaluatorError';
+                        finalMessage = 'Evaluator exited cleanly without signaling result (AC/WA).';
+                    } else {
+                        finalStatus = 'EvaluatorError';
+                        finalMessage = `Evaluator script exited with code ${code}, signal ${signal}.`;
+                        if (signal) evaluator_stderr += `\nEvaluator script terminated by signal: ${signal}`;
+                    }
+                }
+                // If evaluator exits, user program should be stopped unless it already exited.
+                if (!userExited) {
+                     // This might be an issue, user program might be in infinite loop or waiting for input
+                     // that evaluator will no longer provide.
+                    cleanupProcesses('SIGKILL'); // Force kill user program
+                    if (finalStatus === 'Pending') { // If user program was running fine till this point
+                       finalStatus = 'WrongAnswer'; // Or some other status indicating user didn't finish
+                       finalMessage = 'User program terminated as evaluator exited.';
+                    }
+                }
+                checkAndResolve();
+            });
+
+            const resolveInteraction = () => {
+                // Ensure cleanup one last time
+                cleanupProcesses();
+                clearTimeout(userTimer);
+                if (psInterval) clearInterval(psInterval);
+
+                // Fallback if status is still pending (should not happen if logic is correct)
+                if (finalStatus === 'Pending') {
+                    finalStatus = 'InternalError';
+                    finalMessage = 'Evaluation ended with an undetermined status.';
+                }
+                
+                resolve({
+                    status: finalStatus,
+                    message: finalMessage,
+                    interaction_log,
+                    durationMs: userDurationMs, // User program's duration
+                    memoryKb: userMemoryKb,   // User program's memory
+                    user_stderr: user_stderr.trim(),
+                    evaluator_stderr: evaluator_stderr.trim()
+                });
+            };
+
+            let resolved = false;
+            const checkAndResolve = () => {
+                if (resolved) return;
+                // Resolve once both processes have exited OR a definitive state (TLE, MLE, AC, WA from evaluator) is reached.
+                // TLE/MLE/AC/WA conditions should trigger resolveInteraction directly or via cleanup.
+                if ((userExited && evaluatorExited) || 
+                    ['Accepted', 'WrongAnswer', 'TimeLimitExceeded', 'MemoryLimitExceeded', 'RuntimeError', 'EvaluatorError', 'InternalError'].includes(finalStatus) && finalStatus !== 'Pending') {
+                    resolved = true;
+                    resolveInteraction();
+                }
+            };
+
+            // Initial piping to evaluator if startupData is provided (as first "turn" from user, conceptually)
+            // No, this was handled by passing it as arg.
+            // If evaluator needs initial stdin data, it should be from user program's first output.
+
+            // Ensure stdin streams are ended if the other process closes its stdout before ending.
+            userProgram.stdout.on('end', () => {
+                if (evaluatorScript && !evaluatorScript.stdin.destroyed) {
+                    try { evaluatorScript.stdin.end(); } catch(e) {/* ignore */}
+                }
+            });
+            evaluatorScript.stdout.on('end', () => {
+                if (userProgram && !userProgram.stdin.destroyed) {
+                     try { userProgram.stdin.end(); } catch(e) {/* ignore */}
+                }
+            });
+
+        }); // End of Promise
+    }
 }
 
 module.exports = ExecutionService;

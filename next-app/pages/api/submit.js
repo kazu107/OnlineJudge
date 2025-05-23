@@ -260,6 +260,164 @@ async function handleCustomEvaluation(req, res, flush, problemId, language, code
     sendSse(res, { type: 'final_result', total_points_earned: totalPointsEarned, max_total_points: maxTotalPoints, test_case_summary: testCaseResultsSummary }, flush);
 }
 
+async function handleInteractiveEvaluation(req, res, flush, problemId, language, code, meta, tmpDir) {
+    // 2.a. Initial Setup
+    const { interactive_evaluator_options, test_cases } = meta;
+    const problemTimeLimitMs = meta.time_limit_ms || 3000; // Default time limit for user's code
+    const problemMemoryLimitKb = meta.memory_limit_kb || 256000; // Default memory limit
+
+    if (!interactive_evaluator_options || !interactive_evaluator_options.evaluator_script_relative_path || !interactive_evaluator_options.evaluator_language) {
+        sendSse(res, { type: 'error', message: 'Invalid problem metadata: interactive_evaluator_options missing or incomplete.' }, flush);
+        return;
+    }
+    if (!test_cases || !Array.isArray(test_cases)) {
+        sendSse(res, { type: 'error', message: 'Invalid problem metadata: test_cases not found or not an array for interactive problem.' }, flush);
+        return;
+    }
+
+    let totalPointsEarned = 0;
+    const maxTotalPoints = meta.total_max_points || test_cases.reduce((sum, tc) => sum + (tc.points || 0), 0);
+    const testCaseResultsSummary = [];
+
+    // 2.b. Loop Through Test Cases
+    for (const testCase of test_cases) {
+        const testCaseId = testCase.id || `test_case_${testCaseResultsSummary.length + 1}`;
+        let pointsEarnedForTestCase = 0;
+        let currentStatus = "Processing";
+        let resultMessage = "";
+        let resultTime = null;
+        let resultMemory = null;
+        let interactionLog = [];
+        let userStderr = "";
+        let evaluatorStderr = "";
+
+        try {
+            // 2.b.i. Prepare for /execute_interactive call
+            const evaluatorScriptPath = path.join(process.cwd(), 'problems', problemId, interactive_evaluator_options.evaluator_script_relative_path);
+            const evaluatorLanguage = interactive_evaluator_options.evaluator_language;
+            
+            // Ensure evaluator script exists (optional, executor also checks)
+            if (!fs.existsSync(evaluatorScriptPath)) {
+                 currentStatus = "System Error";
+                 resultMessage = `Evaluator script not found at ${evaluatorScriptPath}`;
+                 sendSse(res, { type: 'test_case_result', problem_type: 'interactive', test_case_id: testCaseId, status: currentStatus, points_earned: 0, max_points: testCase.points, message: resultMessage, interaction_log: [], user_stderr: '', evaluator_stderr: '' }, flush);
+                 testCaseResultsSummary.push({ id: testCaseId, score: 0, max_points: testCase.points, status: currentStatus, message: resultMessage });
+                 continue;
+            }
+
+            let evaluatorStartupData = null;
+            if (testCase.evaluator_params) {
+                try {
+                    evaluatorStartupData = JSON.stringify(testCase.evaluator_params);
+                } catch (stringifyError) {
+                    currentStatus = "System Error";
+                    resultMessage = `Failed to stringify evaluator_params for test case ${testCaseId}: ${stringifyError.message}`;
+                    sendSse(res, { type: 'test_case_result', problem_type: 'interactive', test_case_id: testCaseId, status: currentStatus, points_earned: 0, max_points: testCase.points, message: resultMessage, interaction_log: [], user_stderr: '', evaluator_stderr: '' }, flush);
+                    testCaseResultsSummary.push({ id: testCaseId, score: 0, max_points: testCase.points, status: currentStatus, message: resultMessage });
+                    continue; 
+                }
+            }
+
+            const executePayload = {
+                language,
+                code,
+                evaluator_script_host_path: evaluatorScriptPath,
+                evaluator_language: evaluatorLanguage,
+                evaluator_startup_data: evaluatorStartupData,
+                time_limit_ms: problemTimeLimitMs,
+                memory_limit_kb: problemMemoryLimitKb
+            };
+
+            // 2.b.ii. Call /execute_interactive Endpoint
+            const executorInteractiveUrl = `${EXECUTOR_BASE_URL}/execute_interactive`;
+            // Timeout for fetch should be greater than user program's time limit + some buffer for evaluator & network
+            // Assuming evaluator is quick, adding a fixed buffer. If evaluator has its own configurable limit, use that.
+            const fetchTimeout = problemTimeLimitMs + (interactive_evaluator_options.evaluator_time_limit_ms || 5000) + 3000; // Added 3s buffer
+
+            const executeResponse = await fetch(executorInteractiveUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(executePayload),
+                timeout: fetchTimeout 
+            });
+
+            const result = await executeResponse.json();
+
+            // 2.b.iii. Process Response
+            currentStatus = result.status || "Error"; // Executor should provide a status
+            resultMessage = result.message || "No message from executor.";
+            resultTime = result.durationMs;
+            resultMemory = result.memoryKb;
+            interactionLog = result.interaction_log || [];
+            userStderr = result.user_stderr || "";
+            evaluatorStderr = result.evaluator_stderr || "";
+            
+            if (!executeResponse.ok) { // HTTP error from executor
+                 if (result.error_type && result.message) { // Executor sent a structured error
+                    currentStatus = result.status || "Executor Error"; // Use status from executor if available
+                    resultMessage = `Executor error: ${result.message} (Type: ${result.error_type})`;
+                 } else { // Non-JSON error or other HTTP error from executor
+                    currentStatus = "Executor Error";
+                    resultMessage = `Executor service returned HTTP ${executeResponse.status}. Response: ${await executeResponse.text()}`;
+                 }
+            } else { // HTTP OK, use status from result payload
+                if (result.status === 'Accepted') {
+                    pointsEarnedForTestCase = testCase.points || 0;
+                }
+                // Other statuses from executor ('WrongAnswer', 'TimeLimitExceeded', 'RuntimeError', 'CompileError', 'EvaluatorError')
+                // result in 0 points for the test case.
+            }
+
+        } catch (err) {
+            currentStatus = "Submission Error"; // Error in this submit.js logic
+            resultMessage = `Failed to process interactive test case ${testCaseId}: ${err.message}`;
+            if (err.name === 'AbortError' || err.type === 'request-timeout' || err.code === 'ETIMEDOUT') { // fetch timeout
+                currentStatus = "Network Timeout"; 
+                resultMessage = `Request to executor timed out for test case ${testCaseId}. Check executor service.`;
+            }
+             interactionLog = [{source: 'system_error', data: resultMessage, timestamp: Date.now()}]; // Add system error to log
+        }
+        
+        totalPointsEarned += pointsEarnedForTestCase;
+
+        // Send Test Case Result via SSE
+        sendSse(res, { 
+            type: 'test_case_result', 
+            problem_type: 'interactive', 
+            test_case_id: testCaseId, 
+            status: currentStatus, 
+            points_earned: pointsEarnedForTestCase, 
+            max_points: testCase.points, 
+            message: resultMessage, 
+            time: resultTime, 
+            memory: resultMemory, 
+            interaction_log: interactionLog, 
+            user_stderr: userStderr, 
+            evaluator_stderr: evaluatorStderr 
+        }, flush);
+        
+        testCaseResultsSummary.push({ 
+            id: testCaseId, 
+            score: pointsEarnedForTestCase, 
+            max_points: testCase.points, 
+            status: currentStatus, 
+            message: resultMessage,
+            time: resultTime,
+            memory: resultMemory
+            // Do not include full interaction log in summary, it can be large
+        });
+    }
+
+    // 2.c. Send Final Result
+    sendSse(res, { 
+        type: 'final_result', 
+        total_points_earned: totalPointsEarned, 
+        max_total_points: maxTotalPoints, 
+        test_case_summary: testCaseResultsSummary 
+    }, flush);
+}
+
+
 export default async function handler(req, res) {
     if (req.method !== 'POST') {
         res.status(405).end();
@@ -278,23 +436,12 @@ export default async function handler(req, res) {
         return;
     }
 
-    // tmpDir is primarily for standard evaluation if it needs to write solution/input files
-    // For custom evaluation, user's code output is passed in memory.
-    // However, problem data files and evaluator scripts are read from their persistent locations.
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), `submission-${problemId}-`));
     
-    // For standard evaluation, user's code might still be written to disk if the old model expected it.
-    // With the new executor, code is passed as string. This write might be vestigial for standard too.
-    // Let's remove it from here and pass `code` string directly.
-    // let userCodeSolutionFileName = ''; 
-    // switch (language) { ... }
-    // const userCodeSolutionPath = path.join(tmpDir, userCodeSolutionFileName);
-    // fs.writeFileSync(userCodeSolutionPath, code); 
-
     const metaPath = path.join(process.cwd(), 'problems', problemId, 'meta.json');
     if (!fs.existsSync(metaPath)) {
         sendSse(res, { type: 'error', message: 'Problem meta not found' }, flush);
-        fs.rmSync(tmpDir, { recursive: true, force: true }); // Clean tmpDir before exiting
+        fs.rmSync(tmpDir, { recursive: true, force: true });
         res.end();
         return;
     }
@@ -310,18 +457,22 @@ export default async function handler(req, res) {
     }
 
     try {
-        if (meta.evaluation_mode === "custom_evaluator") {
+        if (meta.evaluation_mode === "interactive") {
+            if (!meta.interactive_evaluator_options || !meta.interactive_evaluator_options.evaluator_script_relative_path || !meta.test_cases) {
+                sendSse(res, { type: 'error', message: 'Invalid meta.json for interactive problem: missing options, script path, or test_cases.' }, flush);
+            } else {
+                await handleInteractiveEvaluation(req, res, flush, problemId, language, code, meta, tmpDir);
+            }
+        } else if (meta.evaluation_mode === "custom_evaluator") {
             if (!meta.custom_evaluator_options || !meta.custom_evaluator_options.evaluator_script || !meta.test_cases) {
                  sendSse(res, { type: 'error', message: 'Invalid meta.json for custom_evaluator: missing options, script, or test_cases.' }, flush);
             } else {
-                // For custom eval, code string is passed directly. tmpDir might be used by handleCustomEvaluation for other temp files if any.
                 await handleCustomEvaluation(req, res, flush, problemId, language, code, meta, tmpDir);
             }
         } else { // Default to standard evaluation
             if (!meta.test_case_categories || !Array.isArray(meta.test_case_categories)) {
                  sendSse(res, { type: 'error', message: 'Invalid meta.json for standard evaluation: test_case_categories missing.' }, flush);
             } else {
-                // For standard eval, code string is passed directly. tmpDir is for input.txt per test case.
                 await handleStandardEvaluation(req, res, flush, problemId, language, code, meta, tmpDir);
             }
         }
@@ -333,26 +484,3 @@ export default async function handler(req, res) {
         res.end();
     }
 }
-
-// Original execCommand, used by standard evaluation - THIS SHOULD BE REMOVED / REPLACED
-// function execCommand(cmd, timeout) {
-//     return new Promise((resolve, reject) => {
-//         exec(cmd, { timeout: timeout }, (error, stdout, stderr) => {
-//             if (error) {
-//                 if (error.signal === 'SIGTERM' || error.code === 'ETIMEDOUT') {
-//                     resolve({ 
-//                         tle: true, 
-//                         killed: error.killed, 
-//                         signal: error.signal,
-//                         stdout: stdout || '', 
-//                         stderr: stderr || '' 
-//                     });
-//                 } else {
-//                     reject(stderr || error.message);
-//                 }
-//             } else {
-//                 resolve((stdout || '') + "\n" + (stderr || ''));
-//             }
-//         });
-//     });
-// }
