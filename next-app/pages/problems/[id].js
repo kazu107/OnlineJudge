@@ -55,7 +55,7 @@ function MarkdownRenderer({ content }) {
     );
 }
 
-export default function ProblemPage({ id, statementContent, explanationContent }) {
+export default function ProblemPage({ id, statementContent, explanationContent, evaluationMode, problemMaxPoints, problemTestCasesMeta }) {
     const [activeTab, setActiveTab] = useState('problem');
     const [language, setLanguage] = useState('python');
     const [code, setCode] = useState('');
@@ -124,11 +124,12 @@ export default function ProblemPage({ id, statementContent, explanationContent }
                             } else if (event.type === 'final_result') {
                                 setFinalResult({
                                     total_earned: event.total_points_earned,
-                                    max_total: event.max_total_points,
-                                    summary: event.category_summary // Store summary for rendering order
+                                    // Use problemMaxPoints from props as the definitive max score from meta.json
+                                    max_total_points: problemMaxPoints, 
+                                    summary: evaluationMode === "custom_evaluator" ? event.test_case_summary : event.category_summary
                                 });
                                 setSubmitting(false); // Submission processing finished
-                            } else if (event.error) { // Handle backend error messages
+                            } else if (event.type === 'error') { // Handle backend error messages (type: 'error')
                                 console.error('Backend error event:', event.error);
                                 // Optionally, display this error to the user
                                 // For example, by adding to a new state like `submissionError`
@@ -149,13 +150,24 @@ export default function ProblemPage({ id, statementContent, explanationContent }
         }
     };
     
-    // Helper to get category display order from finalResult or fallback to categoryResults keys
-    const getCategoryOrder = () => {
-        if (finalResult && finalResult.summary) {
-            return finalResult.summary.map(cat => cat.category_name);
+    // Helper to get category display order for standard mode
+    const getCategoryOrderForStandardMode = () => {
+        if (evaluationMode === "standard" && finalResult && finalResult.summary) {
+            // Ensure summary is an array before mapping (it should be for standard mode)
+            return Array.isArray(finalResult.summary) ? finalResult.summary.map(cat => cat.category_name) : [];
         }
-        return Object.keys(categoryResults);
+        // Fallback for standard mode if finalResult.summary isn't ready or not an array
+        return evaluationMode === "standard" ? Object.keys(categoryResults) : [];
     };
+    
+    // Helper to get test case meta for custom mode
+    const getTestCaseMeta = (testCaseId) => {
+        if (evaluationMode === "custom_evaluator" && problemTestCasesMeta) {
+            return problemTestCasesMeta.find(tcMeta => tcMeta.id === testCaseId);
+        }
+        return null;
+    };
+
 
     return (
         <div style={{ backgroundColor: '#ddd', minHeight: '100vh', padding: '2rem' }}>
@@ -238,32 +250,32 @@ export default function ProblemPage({ id, statementContent, explanationContent }
 
                             {finalResult && finalResult.total_earned !== undefined && (
                                 <div style={{ margin: '1rem 0', padding: '1rem', backgroundColor: '#e6f7ff', border: '1px solid #91d5ff', borderRadius: '5px' }}>
-                                    <h3>総合得点: {finalResult.total_earned} / {finalResult.max_total_points} 点</h3>
+                                    <h3>総合得点: {finalResult.total_earned} / {finalResult.max_total_points || problemMaxPoints} 点</h3>
                                 </div>
                             )}
 
-                            {getCategoryOrder().map(categoryName => {
+                            {/* Standard Evaluation Mode Display */}
+                            {evaluationMode === "standard" && getCategoryOrderForStandardMode().map(categoryName => {
                                 const categoryData = categoryResults[categoryName];
-                                const categorySummary = finalResult?.summary?.find(s => s.category_name === categoryName);
+                                // finalResult.summary should be an array of category summaries for standard mode
+                                const categorySummary = finalResult?.summary && Array.isArray(finalResult.summary) ? 
+                                                        finalResult.summary.find(s => s.category_name === categoryName) : null;
+                                
                                 const earnedPoints = categorySummary?.points_earned ?? categoryData?.earned ?? 0;
                                 const maxPoints = categorySummary?.max_points ?? categoryData?.max ?? 0;
                                 const allPassed = categoryData?.allPassed ?? (earnedPoints === maxPoints && maxPoints > 0);
 
                                 const categoryHeaderStyle = {
-                                    padding: '0.8rem',
-                                    marginTop: '1rem',
-                                    border: '1px solid #ddd',
+                                    padding: '0.8rem', marginTop: '1rem', border: '1px solid #ddd',
                                     borderRadius: '5px 5px 0 0',
-                                    backgroundColor: allPassed ? '#d4edda' : (categoryData ? '#f8d7da' : '#e9ecef'), // Green if all passed, Red if processed and failed, Grey if not yet processed
+                                    backgroundColor: allPassed ? '#d4edda' : (categoryData ? '#f8d7da' : '#e9ecef'),
                                     color: allPassed ? '#155724' : (categoryData ? '#721c24' : '#495057'),
                                     borderBottom: 'none'
                                 };
                                 
                                 return (
                                     <div key={categoryName} style={{ marginBottom: '1rem' }}>
-                                        <div style={categoryHeaderStyle}>
-                                            <h4>{categoryName}: {earnedPoints} / {maxPoints} 点</h4>
-                                        </div>
+                                        <div style={categoryHeaderStyle}><h4>{categoryName}: {earnedPoints} / {maxPoints} 点</h4></div>
                                         <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #ddd' }}>
                                             <thead>
                                                 <tr>
@@ -277,22 +289,14 @@ export default function ProblemPage({ id, statementContent, explanationContent }
                                                 {testCaseResults.filter(tc => tc.category_name === categoryName).map((tc, index) => (
                                                     <tr key={index} style={{ backgroundColor: index % 2 === 0 ? '#fff' : '#f9f9f9' }}>
                                                         <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{tc.testCase}</td>
-                                                        <td style={{ border: '1px solid #ccc', padding: '0.5rem', color: tc.status === 'Accepted' ? 'green' : (tc.status === 'Wrong Answer' || tc.status === 'TLE' || tc.status === 'MLE' ? 'red' : 'inherit') }}>
+                                                        <td style={{ border: '1px solid #ccc', padding: '0.5rem', color: tc.status === 'Accepted' ? 'green' : 'red' }}>
                                                             {tc.status}
-                                                            {tc.status === 'Wrong Answer' && (
+                                                            {/* Details for WA, TLE, MLE, Error */}
+                                                            {(tc.status === 'Wrong Answer' || tc.status === 'Error' || tc.status === 'TLE' || tc.status === 'MLE') && (
                                                                 <div style={{fontSize: '0.8em', whiteSpace: 'pre-wrap', maxHeight: '100px', overflowY: 'auto', backgroundColor: '#fff0f0', padding: '5px', marginTop: '5px'}}>
-                                                                    <p style={{margin:0}}>Expected: {tc.expected}</p>
-                                                                    <p style={{margin:0}}>Got: {tc.got}</p>
-                                                                </div>
-                                                            )}
-                                                            {(tc.status === 'TLE' || tc.status === 'MLE') && tc.got && (
-                                                                 <div style={{fontSize: '0.8em', whiteSpace: 'pre-wrap', maxHeight: '100px', overflowY: 'auto', backgroundColor: '#fff0f0', padding: '5px', marginTop: '5px'}}>
-                                                                    <p style={{margin:0}}>Output: {tc.got}</p>
-                                                                </div>
-                                                            )}
-                                                            {tc.status === 'Error' && tc.message && (
-                                                                <div style={{fontSize: '0.8em', whiteSpace: 'pre-wrap', maxHeight: '100px', overflowY: 'auto', backgroundColor: '#fff0f0', padding: '5px', marginTop: '5px'}}>
-                                                                    <p style={{margin:0}}>Error: {tc.message}</p>
+                                                                    {tc.status === 'Wrong Answer' && <p style={{margin:0}}>Expected: {tc.expected}</p>}
+                                                                    {(tc.status === 'Wrong Answer' || tc.status === 'TLE' || tc.status === 'MLE') && tc.got && <p style={{margin:0}}>Got: {tc.got}</p>}
+                                                                    {tc.status === 'Error' && tc.message && <p style={{margin:0}}>Error: {tc.message}</p>}
                                                                 </div>
                                                             )}
                                                         </td>
@@ -310,6 +314,60 @@ export default function ProblemPage({ id, statementContent, explanationContent }
                                     </div>
                                 );
                             })}
+
+                            {/* Custom Evaluator Mode Display */}
+                            {evaluationMode === "custom_evaluator" && (
+                                <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '1rem' }}>
+                                    <thead>
+                                        <tr>
+                                            <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa' }}>テストケース ID</th>
+                                            <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa' }}>説明</th>
+                                            <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa' }}>結果</th>
+                                            <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa' }}>得点</th>
+                                            <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa' }}>メッセージ/詳細</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {(finalResult?.summary || testCaseResults.filter(tc => tc.type === 'test_case_result')).map((tc, index) => {
+                                            // If using finalResult.summary, tc structure is {id, score, max_points, status, message}
+                                            // If using testCaseResults, tc structure is {test_case_id, status, points_earned, max_points, message, stdout_user, stderr_evaluator}
+                                            const id = tc.test_case_id || tc.id;
+                                            const tcMeta = getTestCaseMeta(id);
+                                            const status = tc.status;
+                                            const pointsEarned = tc.points_earned ?? tc.score;
+                                            const maxPts = tc.max_points ?? tcMeta?.max_points;
+                                            const message = tc.message || "";
+                                            const details = [];
+                                            if(tc.stdout_user) details.push(`User Output: ${tc.stdout_user}`);
+                                            if(tc.stderr_evaluator) details.push(`Evaluator Stderr: ${tc.stderr_evaluator}`);
+                                            
+                                            let statusColor = 'inherit';
+                                            if (status === 'Custom Evaluated' && pointsEarned > 0 && pointsEarned === maxPts) statusColor = 'green';
+                                            else if (status === 'Custom Evaluated' && pointsEarned > 0) statusColor = 'orange'; // Partial custom score
+                                            else if (status && status.includes('Error') || pointsEarned === 0 && status !== 'Processing') statusColor = 'red';
+
+
+                                            return (
+                                                <tr key={id || index} style={{ backgroundColor: index % 2 === 0 ? '#fff' : '#f9f9f9' }}>
+                                                    <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{id}</td>
+                                                    <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{tcMeta?.description || '-'}</td>
+                                                    <td style={{ border: '1px solid #ccc', padding: '0.5rem', color: statusColor }}>{status}</td>
+                                                    <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{pointsEarned ?? '-'} / {maxPts ?? '-'}</td>
+                                                    <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>
+                                                        {message}
+                                                        {details.length > 0 && (
+                                                            <div style={{fontSize: '0.8em', whiteSpace: 'pre-wrap', maxHeight: '100px', overflowY: 'auto', backgroundColor: '#f0f0f0', padding: '5px', marginTop: '5px'}}>
+                                                                {details.join('\n')}
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            )}
+                            
                             {!submitting && testCaseResults.length === 0 && !finalResult && (
                                 <p>まだ結果がありません。</p>
                             )}
@@ -352,11 +410,39 @@ export async function getStaticProps({ params }) {
         explanationContent = fs.readFileSync(explanationPath, 'utf8');
     }
 
+    // Read meta.json to get evaluation_mode and other necessary info
+    const metaPath = path.join(problemDir, 'meta.json');
+    let evaluationMode = "standard"; // Default
+    let problemMaxPoints = 100; // Default or sum
+    let problemTestCasesMeta = null;
+
+    if (fs.existsSync(metaPath)) {
+        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+        evaluationMode = meta.evaluation_mode || "standard";
+        
+        if (evaluationMode === "custom_evaluator") {
+            problemMaxPoints = meta.max_total_points || (meta.test_cases ? meta.test_cases.reduce((sum, tc) => sum + (tc.points || 0), 0) : 0);
+            problemTestCasesMeta = meta.test_cases ? meta.test_cases.map(tc => ({ 
+                id: tc.id, 
+                max_points: tc.points || 0, 
+                description: tc.description || '' 
+            })) : [];
+        } else { // Standard mode (category-based)
+            problemMaxPoints = meta.test_case_categories ? meta.test_case_categories.reduce((sum, cat) => sum + (cat.points || 0), 0) : 0;
+            // For standard mode, problemTestCasesMeta is not strictly needed in the same way,
+            // but categories could be passed if a pre-defined list of categories is useful before results stream in.
+            // For now, keeping it null for standard mode as category info comes from SSE.
+        }
+    }
+
     return {
         props: {
             id: params.id,
             statementContent,
             explanationContent,
+            evaluationMode,
+            problemMaxPoints,
+            problemTestCasesMeta
         },
     };
 }
