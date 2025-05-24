@@ -108,7 +108,6 @@ export default function ProblemPage({ id, statementContent, explanationContent, 
                         const jsonStr = line.replace(/^data:\s*/, '');
                         try {
                             const event = JSON.parse(jsonStr);
-                            const event = JSON.parse(jsonStr);
 
                             if (event.type === 'test_case_result') {
                                 setTestCaseResults(prev => [...prev, event]);
