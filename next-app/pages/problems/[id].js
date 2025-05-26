@@ -64,15 +64,20 @@ export default function ProblemPage({ id, statementContent, explanationContent, 
     const [testCaseResults, setTestCaseResults] = useState([]); // Individual test case results
     const [categoryResults, setCategoryResults] = useState({}); // { categoryName: { earned: 0, max: 0, allPassed: false }, ... }
     const [finalResult, setFinalResult] = useState(null); // { total_earned: 0, max_total: 0, summary: [] }
-    
     const [submitting, setSubmitting] = useState(false);
+
+    // State for new UI:
+    const [testSuite, setTestSuite] = useState(null); // Holds all test cases info from 'test_suite_info'
+    const [openCategories, setOpenCategories] = useState({}); // Tracks open/closed state of category accordions
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        // Clear previous results
+        // Clear previous results and new states
         setTestCaseResults([]);
         setCategoryResults({});
         setFinalResult(null);
+        setTestSuite(null); // Clear test suite
+        setOpenCategories({}); // Reset open categories
         
         setSubmitting(true);
         setActiveTab('result');
@@ -109,9 +114,20 @@ export default function ProblemPage({ id, statementContent, explanationContent, 
                         try {
                             const event = JSON.parse(jsonStr);
 
-                            if (event.type === 'test_case_result') {
+                            if (event.type === 'test_suite_info') {
+                                setTestSuite(event.test_cases || []);
+                                const initialOpenCategories = {};
+                                if (event.test_cases) {
+                                    event.test_cases.forEach(tc => {
+                                        if (tc.category_name) { // Ensure category_name exists
+                                            initialOpenCategories[tc.category_name] = true; // Default to open
+                                        }
+                                    });
+                                }
+                                setOpenCategories(initialOpenCategories);
+                            } else if (event.type === 'test_case_result') {
                                 setTestCaseResults(prev => [...prev, event]);
-                            } else if (event.type === 'category_result') {
+                            } else if (event.type === 'category_result') { // Standard mode specific
                                 setCategoryResults(prev => ({
                                     ...prev,
                                     [event.category_name]: {
@@ -147,6 +163,28 @@ export default function ProblemPage({ id, statementContent, explanationContent, 
              setSubmitting(false);
              console.warn("SSE stream finished without a final_result event.");
         }
+    };
+
+    // Helper function to group test cases by category
+    const groupTestSuiteByCategory = (suite) => {
+        if (!suite) return [];
+        const groups = suite.reduce((acc, tc) => {
+            const categoryName = tc.category_name || 'Uncategorized'; // Fallback for uncategorized
+            if (!acc[categoryName]) {
+                acc[categoryName] = [];
+            }
+            acc[categoryName].push(tc);
+            return acc;
+        }, {});
+        return Object.entries(groups).map(([categoryName, testCasesInCategory]) => ({
+            categoryName,
+            testCasesInCategory,
+        }));
+    };
+
+    // Toggle category visibility
+    const toggleCategory = (categoryName) => {
+        setOpenCategories(prev => ({ ...prev, [categoryName]: !prev[categoryName] }));
     };
     
     // Helper to get category display order for standard mode
@@ -239,7 +277,8 @@ export default function ProblemPage({ id, statementContent, explanationContent, 
                     {activeTab === 'result' && (
                         <div>
                             <h2>提出結果</h2>
-                            {submitting && testCaseResults.length === 0 && !finalResult && <p>判定中…</p>}
+                            {submitting && !testSuite && !finalResult && <p>テストスイートを読み込み中...</p>}
+                            {submitting && testSuite && testCaseResults.length === 0 && !finalResult && <p>判定中...</p>}
                             
                             {finalResult && finalResult.error && (
                                 <div style={{ padding: '1rem', backgroundColor: '#ffdddd', border: '1px solid #ff0000', borderRadius: '5px', color: '#D8000C'}}>
@@ -247,127 +286,125 @@ export default function ProblemPage({ id, statementContent, explanationContent, 
                                 </div>
                             )}
 
-                            {finalResult && finalResult.total_earned !== undefined && (
+                            {/* Conditionally render Overall Score Display if not problem_tsp */}
+                            {id !== "problem_tsp" && finalResult && finalResult.total_earned !== undefined && (
                                 <div style={{ margin: '1rem 0', padding: '1rem', backgroundColor: '#e6f7ff', border: '1px solid #91d5ff', borderRadius: '5px' }}>
                                     <h3>総合得点: {finalResult.total_earned} / {finalResult.max_total_points || problemMaxPoints} 点</h3>
                                 </div>
                             )}
 
-                            {/* Standard Evaluation Mode Display */}
-                            {evaluationMode === "standard" && getCategoryOrderForStandardMode().map(categoryName => {
-                                const categoryData = categoryResults[categoryName];
-                                // finalResult.summary should be an array of category summaries for standard mode
-                                const categorySummary = finalResult?.summary && Array.isArray(finalResult.summary) ? 
-                                                        finalResult.summary.find(s => s.category_name === categoryName) : null;
-                                
-                                const earnedPoints = categorySummary?.points_earned ?? categoryData?.earned ?? 0;
-                                const maxPoints = categorySummary?.max_points ?? categoryData?.max ?? 0;
-                                const allPassed = categoryData?.allPassed ?? (earnedPoints === maxPoints && maxPoints > 0);
-
-                                const categoryHeaderStyle = {
-                                    padding: '0.8rem', marginTop: '1rem', border: '1px solid #ddd',
-                                    borderRadius: '5px 5px 0 0',
-                                    backgroundColor: allPassed ? '#d4edda' : (categoryData ? '#f8d7da' : '#e9ecef'),
-                                    color: allPassed ? '#155724' : (categoryData ? '#721c24' : '#495057'),
-                                    borderBottom: 'none'
-                                };
-                                
-                                return (
-                                    <div key={categoryName} style={{ marginBottom: '1rem' }}>
-                                        <div style={categoryHeaderStyle}><h4>{categoryName}: {earnedPoints} / {maxPoints} 点</h4></div>
-                                        <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #ddd' }}>
+                            {/* New UI for displaying test cases from testSuite */}
+                            {testSuite && groupTestSuiteByCategory(testSuite).map(({ categoryName, testCasesInCategory }) => (
+                                <div key={categoryName} style={{ marginBottom: '1rem' }}>
+                                    <div 
+                                        onClick={() => toggleCategory(categoryName)}
+                                        style={{ 
+                                            padding: '0.8rem', 
+                                            marginTop: '1rem', 
+                                            border: '1px solid #ddd',
+                                            borderRadius: '5px 5px 0 0',
+                                            backgroundColor: '#e9ecef',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center'
+                                        }}
+                                    >
+                                        <h4>{categoryName}</h4>
+                                        <span>{openCategories[categoryName] ? '▲' : '▼'}</span>
+                                    </div>
+                                    {openCategories[categoryName] && (
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #ddd', borderTop: 'none' }}>
                                             <thead>
                                                 <tr>
-                                                    <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa' }}>テストケース名</th>
-                                                    <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa' }}>結果</th>
-                                                    <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa' }}>実行時間 (ms)</th>
-                                                    <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa' }}>メモリ (KB)</th>
+                                                    <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa', textAlign: 'left' }}>テストケース</th>
+                                                    <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa', textAlign: 'left' }}>結果</th>
+                                                    {/* Conditionally render Points Header if not problem_tsp for custom_evaluator */}
+                                                    {evaluationMode === "custom_evaluator" && id !== "problem_tsp" && <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa', textAlign: 'left' }}>得点</th>}
+                                                    {evaluationMode === "standard" && <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa', textAlign: 'left' }}>実行時間 (ms)</th>}
+                                                    {evaluationMode === "standard" && <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa', textAlign: 'left' }}>メモリ (KB)</th>}
+                                                    <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa', textAlign: 'left' }}>メッセージ/詳細</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {testCaseResults.filter(tc => tc.category_name === categoryName).map((tc, index) => (
-                                                    <tr key={index} style={{ backgroundColor: index % 2 === 0 ? '#fff' : '#f9f9f9' }}>
-                                                        <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{tc.testCase}</td>
-                                                        <td style={{ border: '1px solid #ccc', padding: '0.5rem', color: tc.status === 'Accepted' ? 'green' : 'red' }}>
-                                                            {tc.status}
-                                                            {/* Details for WA, TLE, MLE, Error */}
-                                                            {(tc.status === 'Wrong Answer' || tc.status === 'Error' || tc.status === 'TLE' || tc.status === 'MLE') && (
-                                                                <div style={{fontSize: '0.8em', whiteSpace: 'pre-wrap', maxHeight: '100px', overflowY: 'auto', backgroundColor: '#fff0f0', padding: '5px', marginTop: '5px'}}>
-                                                                    {tc.status === 'Wrong Answer' && <p style={{margin:0}}>Expected: {tc.expected}</p>}
-                                                                    {(tc.status === 'Wrong Answer' || tc.status === 'TLE' || tc.status === 'MLE') && tc.got && <p style={{margin:0}}>Got: {tc.got}</p>}
-                                                                    {tc.status === 'Error' && tc.message && <p style={{margin:0}}>Error: {tc.message}</p>}
-                                                                </div>
-                                                            )}
-                                                        </td>
-                                                        <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{tc.time ?? '-'}</td>
-                                                        <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{tc.memory ?? '-'}</td>
-                                                    </tr>
-                                                ))}
+                                                {testCasesInCategory.map((suiteTc, index) => {
+                                                    // Find the result for this test case
+                                                    // For standard mode, suiteTc.id might be composite. resultTc.testCase is the simple name.
+                                                    // For custom mode, suiteTc.id directly matches resultTc.test_case_id.
+                                                    const resultTc = testCaseResults.find(r => 
+                                                        evaluationMode === "custom_evaluator" ? r.test_case_id === suiteTc.id :
+                                                        (r.category_name === suiteTc.category_name && r.testCase === suiteTc.name)
+                                                    );
+
+                                                    const status = resultTc ? resultTc.status : "判定中...";
+                                                    const pointsEarned = resultTc ? (resultTc.points_earned ?? resultTc.score) : "-";
+                                                    const maxPts = resultTc ? resultTc.max_points : (getTestCaseMeta(suiteTc.id)?.max_points || '-');
+                                                    
+                                                    let message = resultTc ? resultTc.message || "" : "";
+                                                    if (resultTc && resultTc.status === 'Wrong Answer' && resultTc.expected) message = `Expected: ${resultTc.expected}, Got: ${resultTc.got || ''}`;
+                                                    else if (resultTc && (resultTc.status === 'TLE' || resultTc.status === 'MLE') && resultTc.got) message = `Output: ${resultTc.got}`;
+                                                    else if (resultTc && resultTc.status === 'Error' && resultTc.message) message = resultTc.message;
+
+
+                                                    let statusColor = 'inherit';
+                                                    if (status === 'Accepted' || (status === 'Custom Evaluated' && pointsEarned > 0 && pointsEarned === maxPts)) statusColor = 'green';
+                                                    else if (status === 'Custom Evaluated' && pointsEarned > 0) statusColor = 'orange';
+                                                    else if (status !== "判定中..." && (status.includes('Error') || status.includes('Wrong') || status.includes('TLE') || status.includes('MLE') || pointsEarned === 0)) statusColor = 'red';
+                                                    
+                                                    const execTime = resultTc?.time ?? '-';
+                                                    const memoryUsage = resultTc?.memory ?? '-';
+
+                                                    return (
+                                                        <tr key={suiteTc.id || index} style={{ backgroundColor: index % 2 === 0 ? '#fff' : '#f9f9f9' }}>
+                                                            <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{suiteTc.name}</td>
+                                                            <td style={{ border: '1px solid #ccc', padding: '0.5rem', color: statusColor }}>{status}</td>
+                                                            {/* Conditionally render Points Cell if not problem_tsp for custom_evaluator */}
+                                                            {evaluationMode === "custom_evaluator" && id !== "problem_tsp" && <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{pointsEarned} / {maxPts}</td>}
+                                                            {evaluationMode === "standard" && <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{execTime}</td>}
+                                                            {evaluationMode === "standard" && <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{memoryUsage}</td>}
+                                                            <td style={{ border: '1px solid #ccc', padding: '0.5rem', fontSize: '0.9em' }}>
+                                                                {message}
+                                                                {resultTc && resultTc.stdout_user && evaluationMode === "custom_evaluator" && <div style={{fontSize: '0.8em', whiteSpace: 'pre-wrap', maxHeight: '60px', overflowY: 'auto', backgroundColor: '#f0f0f0', padding: '3px', marginTop: '3px'}}>User STDOUT: {resultTc.stdout_user}</div>}
+                                                                {resultTc && resultTc.stderr_evaluator && evaluationMode === "custom_evaluator" && <div style={{fontSize: '0.8em', whiteSpace: 'pre-wrap', maxHeight: '60px', overflowY: 'auto', backgroundColor: '#f0f0f0', padding: '3px', marginTop: '3px'}}>Evaluator STDERR: {resultTc.stderr_evaluator}</div>}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
                                             </tbody>
                                         </table>
-                                        {testCaseResults.filter(tc => tc.category_name === categoryName).length === 0 && !submitting && (
-                                            <div style={{padding: '0.5rem', textAlign: 'center', border: '1px solid #ddd', borderTop:'none', backgroundColor: '#fff'}}>
-                                                <p>このカテゴリーのテストケース結果はまだありません。</p>
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })}
-
-                            {/* Custom Evaluator Mode Display */}
-                            {evaluationMode === "custom_evaluator" && (
-                                <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '1rem' }}>
-                                    <thead>
-                                        <tr>
-                                            <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa' }}>テストケース ID</th>
-                                            <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa' }}>説明</th>
-                                            <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa' }}>結果</th>
-                                            <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa' }}>得点</th>
-                                            <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa' }}>メッセージ/詳細</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {(finalResult?.summary || testCaseResults.filter(tc => tc.type === 'test_case_result')).map((tc, index) => {
-                                            // If using finalResult.summary, tc structure is {id, score, max_points, status, message}
-                                            // If using testCaseResults, tc structure is {test_case_id, status, points_earned, max_points, message, stdout_user, stderr_evaluator}
-                                            const id = tc.test_case_id || tc.id;
-                                            const tcMeta = getTestCaseMeta(id);
-                                            const status = tc.status;
-                                            const pointsEarned = tc.points_earned ?? tc.score;
-                                            const maxPts = tc.max_points ?? tcMeta?.max_points;
-                                            const message = tc.message || "";
-                                            const details = [];
-                                            if(tc.stdout_user) details.push(`User Output: ${tc.stdout_user}`);
-                                            if(tc.stderr_evaluator) details.push(`Evaluator Stderr: ${tc.stderr_evaluator}`);
-                                            
-                                            let statusColor = 'inherit';
-                                            if (status === 'Custom Evaluated' && pointsEarned > 0 && pointsEarned === maxPts) statusColor = 'green';
-                                            else if (status === 'Custom Evaluated' && pointsEarned > 0) statusColor = 'orange'; // Partial custom score
-                                            else if (status && status.includes('Error') || pointsEarned === 0 && status !== 'Processing') statusColor = 'red';
-
-
-                                            return (
-                                                <tr key={id || index} style={{ backgroundColor: index % 2 === 0 ? '#fff' : '#f9f9f9' }}>
-                                                    <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{id}</td>
-                                                    <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{tcMeta?.description || '-'}</td>
-                                                    <td style={{ border: '1px solid #ccc', padding: '0.5rem', color: statusColor }}>{status}</td>
-                                                    <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{pointsEarned ?? '-'} / {maxPts ?? '-'}</td>
-                                                    <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>
-                                                        {message}
-                                                        {details.length > 0 && (
-                                                            <div style={{fontSize: '0.8em', whiteSpace: 'pre-wrap', maxHeight: '100px', overflowY: 'auto', backgroundColor: '#f0f0f0', padding: '5px', marginTop: '5px'}}>
-                                                                {details.join('\n')}
-                                                            </div>
-                                                        )}
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                            )}
+                                    )}
+                                </div>
+                            ))}
                             
-                            {!submitting && testCaseResults.length === 0 && !finalResult && (
+                            {/* Keep existing final result display, but conditionally hide overall score for problem_tsp */}
+                            {id !== "problem_tsp" && finalResult && finalResult.total_earned !== undefined && (
+                                 <div style={{ marginTop: '2rem', padding: '1rem', backgroundColor: '#e6f7ff', border: '1px solid #91d5ff', borderRadius: '5px' }}>
+                                    <h3>総合得点: {finalResult.total_earned} / {finalResult.max_total_points || problemMaxPoints} 点</h3>
+                                    {/* Display category summaries for standard mode still, if available in finalResult.summary */}
+                                    {/* This part of the summary might also be duplicative if the main table already shows category points for standard */}
+                                    {evaluationMode === "standard" && finalResult.summary && Array.isArray(finalResult.summary) && (
+                                        <div style={{marginTop: '1rem'}}>
+                                            <h4>カテゴリ別得点:</h4>
+                                            <ul style={{listStyleType: 'none', paddingLeft: 0}}>
+                                                {finalResult.summary.map(catSummary => (
+                                                    <li key={catSummary.category_name}>
+                                                        {catSummary.category_name}: {catSummary.points_earned} / {catSummary.max_points}
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                            {/* If it's problem_tsp and final result is available, show a message or nothing for overall score */}
+                            {id === "problem_tsp" && finalResult && finalResult.total_earned !== undefined && (
+                                <div style={{ marginTop: '2rem', padding: '1rem', backgroundColor: '#e9ecef', border: '1px solid #ced4da', borderRadius: '5px', textAlign: 'center' }}>
+                                    <p style={{margin:0, fontSize: '0.9em', color: '#495057'}}>この問題では総合得点は表示されません。各テストケースの総移動距離を参考にしてください。</p>
+                                </div>
+                            )}
+
+
+                            {!submitting && !testSuite && !finalResult && (
                                 <p>まだ結果がありません。</p>
                             )}
                         </div>

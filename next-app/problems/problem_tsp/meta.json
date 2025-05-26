@@ -10,25 +10,40 @@
     "evaluator_memory_limit_kb": 1024000,
     "evaluator_language": "python3"
   },
-  "test_cases": [
+  "test_case_categories": [
     {
-      "id": "tsp_5_cities",
-      "description": "5都市の対称TSPインスタンス",
-      "data_file": "problems/problem_tsp/test_data/tsp_5_cities.json",
-      "points": 30
+      "category_name": "Standard Instances",
+      "points": 0,
+      "test_cases": [
+        {
+          "id": "tsp_5_cities",
+          "description": "5都市の対称TSPインスタンス",
+          "data_file": "problems/problem_tsp/tests/input/tsp_5_cities_input.txt",
+          "eval_aux_data_file": "problems/problem_tsp/tests/aux_data/tsp_5_cities.json",
+          "points": 0
+        },
+        {
+          "id": "tsp_10_cities",
+          "description": "10都市の対称TSPインスタンス",
+          "data_file": "problems/problem_tsp/tests/input/tsp_10_cities_input.txt",
+          "eval_aux_data_file": "problems/problem_tsp/tests/aux_data/tsp_10_cities.json",
+          "points": 0
+        }
+      ]
     },
     {
-      "id": "tsp_10_cities",
-      "description": "10都市の対称TSPインスタンス",
-      "data_file": "problems/problem_tsp/test_data/tsp_10_cities.json",
-      "points": 40
-    },
-    {
-      "id": "tsp_challenge_15_cities",
-      "description": "15都市のチャレンジTSPインスタンス",
-      "data_file": "problems/problem_tsp/test_data/tsp_challenge_15_cities.json",
-      "points": 30
+      "category_name": "Challenge Instances",
+      "points": 0,
+      "test_cases": [
+        {
+          "id": "tsp_challenge_15_cities",
+          "description": "15都市のチャレンジTSPインスタンス",
+          "data_file": "problems/problem_tsp/tests/input/tsp_challenge_15_cities_input.txt",
+          "eval_aux_data_file": "problems/problem_tsp/tests/aux_data/tsp_challenge_15_cities.json",
+          "points": 0
+        }
+      ]
     }
   ],
-  "max_total_points": 100
+  "max_total_points": 0
 }

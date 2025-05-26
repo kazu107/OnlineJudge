@@ -108,31 +108,15 @@ def main():
 
 
     # --- Scoring ---
+    # Score is always 0 according to the new policy.
     score = 0
-    optimal_distance = city_data.get("optimal_distance")
-    message = f"Total distance: {total_distance:.2f}."
+    # Message for a valid tour is just the total distance.
+    message = f"Total distance: {total_distance:.2f}" # Keep two decimal places for distance
 
-    if optimal_distance is not None:
-        try:
-            optimal_distance = float(optimal_distance) # Ensure it's a float
-            message += f" Optimal reference: {optimal_distance:.2f}."
-            if total_distance <= optimal_distance: # Handles cases where total_distance might be slightly less due to precision
-                score = max_points
-            elif optimal_distance > 0 and total_distance <= optimal_distance * 1.5: # Avoid division by zero if optimal_distance is 0
-                # Linear scaling for distances between optimal and 1.5*optimal
-                reduction_factor = (total_distance - optimal_distance) / (optimal_distance * 0.5)
-                score = max_points * (1 - min(reduction_factor, 1.0)) 
-                score = max(0, score) # Ensure score is not negative
-            else: # total_distance is > 1.5 * optimal_distance, or optimal_distance is 0 and total_distance > 0
-                score = 0 
-        except ValueError:
-             message += " Optimal distance in data file is not a valid number. Using fallback scoring."
-             score = max_points / 2 # Fallback if optimal_distance is not a number
-    else:
-        message += " No optimal distance provided for reference. Awarding partial points for a valid tour."
-        score = max_points / 2 # Fallback if optimal_distance is not provided
+    # The max_points argument (sys.argv[3]) is received but not used for scoring.
+    # The optimal_distance from city_data is also not used for scoring.
 
-    print(json.dumps({"score": round(score), "message": message}))
+    print(json.dumps({"score": score, "message": message}))
 
 if __name__ == '__main__':
     main()
