@@ -55,7 +55,7 @@ function MarkdownRenderer({ content }) {
     );
 }
 
-export default function ProblemPage({ id, statementContent, explanationContent }) {
+export default function ProblemPage({ id, statementContent, explanationContent, metaData }) { // metaData を props で受け取る
     const [activeTab, setActiveTab] = useState('problem');
     const [language, setLanguage] = useState('python');
     const [code, setCode] = useState('');
@@ -64,18 +64,34 @@ export default function ProblemPage({ id, statementContent, explanationContent }
     const [testCaseResults, setTestCaseResults] = useState([]); // Individual test case results
     const [categoryResults, setCategoryResults] = useState({}); // { categoryName: { earned: 0, max: 0, allPassed: false }, ... }
     const [finalResult, setFinalResult] = useState(null); // { total_earned: 0, max_total: 0, summary: [] }
+    const [collapsedCategories, setCollapsedCategories] = useState({}); // New state for collapsible categories
 
     const [submitting, setSubmitting] = useState(false);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        // Clear previous results
-        setTestCaseResults([]);
-        setCategoryResults({});
-        setFinalResult(null);
-
         setSubmitting(true);
         setActiveTab('result');
+        setCategoryResults({}); // Clear previous category aggregates
+        setFinalResult(null);   // Clear previous final result
+
+        // Initialize testCaseResults with all test cases from metaData
+        if (metaData && metaData.test_case_categories && Array.isArray(metaData.test_case_categories)) {
+            const initialTestCases = metaData.test_case_categories.flatMap(category =>
+                category.test_cases.map(tc => ({
+                    category_name: category.category_name,
+                    testCase: path.basename(tc.input), // Ensure this matches the 'testCase' field in SSE events
+                    status: "判定中",
+                    time: '-',
+                    memory: '-',
+                }))
+            );
+            setTestCaseResults(initialTestCases);
+        } else {
+            console.error("metaData or metaData.test_case_categories is not valid. Cannot initialize test cases.");
+            setTestCaseResults([]); // Fallback to empty if metaData is missing
+            // Optionally, you could set an error state here to inform the user
+        }
 
         // POST 提出を fetch で実行。レスポンスは SSE 形式のストリーム
         const response = await fetch('/api/submit', {
@@ -111,7 +127,24 @@ export default function ProblemPage({ id, statementContent, explanationContent }
 
 
                             if (event.type === 'test_case_result') {
-                                setTestCaseResults(prev => [...prev, event]);
+                                setTestCaseResults(prevResults =>
+                                    prevResults.map(tc => {
+                                        if (tc.testCase === event.testCase && tc.category_name === event.category_name) {
+                                            // Merge event data into the existing test case
+                                            // Only update specific fields from the event to avoid overwriting tc.type or other essential fields
+                                            return {
+                                                ...tc,
+                                                status: event.status,
+                                                time: event.time !== undefined ? event.time : tc.time,
+                                                memory: event.memory !== undefined ? event.memory : tc.memory,
+                                                got: event.got !== undefined ? event.got : tc.got,
+                                                expected: event.expected !== undefined ? event.expected : tc.expected,
+                                                message: event.message !== undefined ? event.message : tc.message,
+                                            };
+                                        }
+                                        return tc;
+                                    })
+                                );
                             } else if (event.type === 'category_result') {
                                 setCategoryResults(prev => ({
                                     ...prev,
@@ -159,6 +192,16 @@ export default function ProblemPage({ id, statementContent, explanationContent }
 
     return (
         <div style={{ backgroundColor: '#ddd', minHeight: '100vh', padding: '2rem' }}>
+            {/* metaData を表示（例） */}
+            {metaData && (
+                <div style={{ padding: '1rem', backgroundColor: '#eef', marginBottom: '1rem', borderRadius: '5px', border: '1px solid #aac' }}>
+                    <h3>Problem Information (from meta.json)</h3>
+                    <p><strong>Title:</strong> {metaData.title || 'N/A'}</p>
+                    <p><strong>Difficulty:</strong> {metaData.difficulty || 'N/A'}</p>
+                    <p><strong>Time Limit:</strong> {metaData.timeLimit || 'N/A'}</p>
+                    <p><strong>Memory Limit:</strong> {metaData.memoryLimit || 'N/A'}</p>
+                </div>
+            )}
             <div style={{
                 maxWidth: '1000px',
                 margin: '0 auto',
@@ -256,18 +299,23 @@ export default function ProblemPage({ id, statementContent, explanationContent }
                                     borderRadius: '5px 5px 0 0',
                                     backgroundColor: allPassed ? '#d4edda' : (categoryData ? '#f8d7da' : '#e9ecef'), // Green if all passed, Red if processed and failed, Grey if not yet processed
                                     color: allPassed ? '#155724' : (categoryData ? '#721c24' : '#495057'),
-                                    borderBottom: 'none'
+                                    borderBottom: collapsedCategories[categoryName] ? '1px solid #ddd' : 'none', // Add bottom border if collapsed
+                                    cursor: 'pointer' // Add cursor pointer
                                 };
 
                                 return (
                                     <div key={categoryName} style={{ marginBottom: '1rem' }}>
-                                        <div style={categoryHeaderStyle}>
-                                            <h4>{categoryName}: {earnedPoints} / {maxPoints} 点</h4>
+                                        <div style={categoryHeaderStyle} onClick={() => setCollapsedCategories(prev => ({ ...prev, [categoryName]: !prev[categoryName] }))}>
+                                            <h4>
+                                                {collapsedCategories[categoryName] ? '▶' : '▼'} {categoryName}: {earnedPoints} / {maxPoints} 点
+                                            </h4>
                                         </div>
-                                        <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #ddd' }}>
-                                            <thead>
-                                            <tr>
-                                                <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa' }}>テストケース名</th>
+                                        {!collapsedCategories[categoryName] && (
+                                            <>
+                                                <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #ddd', borderTop: 'none' }}>
+                                                    <thead>
+                                                    <tr>
+                                                        <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa' }}>テストケース名</th>
                                                 <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa' }}>結果</th>
                                                 <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa' }}>実行時間 (ms)</th>
                                                 <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa' }}>メモリ (KB)</th>
@@ -300,12 +348,14 @@ export default function ProblemPage({ id, statementContent, explanationContent }
                                                     <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{tc.memory ?? '-'}</td>
                                                 </tr>
                                             ))}
-                                            </tbody>
-                                        </table>
-                                        {testCaseResults.filter(tc => tc.category_name === categoryName).length === 0 && !submitting && (
-                                            <div style={{padding: '0.5rem', textAlign: 'center', border: '1px solid #ddd', borderTop:'none', backgroundColor: '#fff'}}>
-                                                <p>このカテゴリーのテストケース結果はまだありません。</p>
-                                            </div>
+                                                    </tbody>
+                                                </table>
+                                                {testCaseResults.filter(tc => tc.category_name === categoryName).length === 0 && !submitting && (
+                                                    <div style={{padding: '0.5rem', textAlign: 'center', border: '1px solid #ddd', borderTop:'none', backgroundColor: '#fff'}}>
+                                                        <p>このカテゴリーのテストケース結果はまだありません。</p>
+                                                    </div>
+                                                )}
+                                            </>
                                         )}
                                     </div>
                                 );
@@ -340,7 +390,7 @@ export async function getStaticPaths() {
     return { paths, fallback: false };
 }
 
-// getStaticProps: 指定された問題フォルダ内の Markdown ファイルを読み込む例
+// getStaticProps: 指定された問題フォルダ内の Markdown ファイルと meta.json を読み込む
 export async function getStaticProps({ params }) {
     const problemDir = path.join(process.cwd(), 'problems', params.id);
     const statementPath = path.join(problemDir, 'statement.md');
@@ -352,11 +402,26 @@ export async function getStaticProps({ params }) {
         explanationContent = fs.readFileSync(explanationPath, 'utf8');
     }
 
+    let metaData = null; // 初期値を null に設定
+    const metaPath = path.join(problemDir, 'meta.json');
+    try {
+        if (fs.existsSync(metaPath)) {
+            const metaFileContent = fs.readFileSync(metaPath, 'utf8');
+            metaData = JSON.parse(metaFileContent);
+        } else {
+            console.warn(`meta.json not found for problem ${params.id}. Passing null for metaData.`);
+        }
+    } catch (error) {
+        console.error(`Error reading or parsing meta.json for problem ${params.id}:`, error);
+        // エラーが発生した場合も metaData は null のまま
+    }
+
     return {
         props: {
             id: params.id,
             statementContent,
             explanationContent,
+            metaData, // metaData を props に追加
         },
     };
 }
