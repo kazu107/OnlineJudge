@@ -8,8 +8,6 @@ services:
       - ./next-app:/app
       # 必要に応じて Docker ソケットをマウント（セキュリティには注意）
       - /var/run/docker.sock:/var/run/docker.sock
-    depends_on:
-      - executor
   executor:
     build: ./executor
     image: executor
