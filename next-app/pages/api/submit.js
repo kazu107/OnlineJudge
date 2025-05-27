@@ -69,6 +69,19 @@ export default async function handler(req, res) {
         return;
     }
 
+    // Construct and send test_suite_info event
+    const testSuiteInfo = {
+        type: 'test_suite_info',
+        data: {
+            categories: categories.map(category => ({
+                name: category.category_name,
+                test_cases: category.test_cases.map(tc => path.basename(tc.input))
+            }))
+        }
+    };
+    res.write(`data: ${JSON.stringify(testSuiteInfo)}\n\n`);
+    flush();
+
     let totalPointsEarned = 0;
     const maxTotalPoints = categories.reduce((sum, cat) => sum + (cat.points || 0), 0);
     const categorySummaries = [];
