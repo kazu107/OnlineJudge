@@ -55,7 +55,7 @@ function MarkdownRenderer({ content }) {
     );
 }
 
-export default function ProblemPage({ id, statementContent, explanationContent, allTestCasesMeta }) {
+export default function ProblemPage({ id, statementContent, explanationContent }) {
     const [activeTab, setActiveTab] = useState('problem');
     const [language, setLanguage] = useState('python');
     const [code, setCode] = useState('');
@@ -64,38 +64,15 @@ export default function ProblemPage({ id, statementContent, explanationContent, 
     const [testCaseResults, setTestCaseResults] = useState([]); // Individual test case results
     const [categoryResults, setCategoryResults] = useState({}); // { categoryName: { earned: 0, max: 0, allPassed: false }, ... }
     const [finalResult, setFinalResult] = useState(null); // { total_earned: 0, max_total: 0, summary: [] }
-    const [collapsedCategories, setCollapsedCategories] = useState({}); // { categoryName: boolean }
 
     const [submitting, setSubmitting] = useState(false);
 
-    const toggleCategoryCollapse = (categoryName) => {
-        setCollapsedCategories(prev => ({
-            ...prev,
-            [categoryName]: !prev[categoryName] // Toggle state, defaults to true if undefined
-        }));
-    };
-
     const handleSubmit = async (e) => {
         e.preventDefault();
-        // Clear previous results and initialize with "判定中"
-        const initialResults = allTestCasesMeta.flatMap(category =>
-            category.testCases.map(tcName => ({
-                testCase: tcName,
-                category_name: category.categoryName,
-                status: "判定中",
-                time: null,
-                memory: null,
-                expected: null, // Add expected and got for consistency
-                got: null,
-                message: null
-            }))
-        );
-        setTestCaseResults(initialResults);
+        // Clear previous results
+        setTestCaseResults([]);
         setCategoryResults({});
         setFinalResult(null);
-        // Reset collapsed state for categories to be open by default on new submission
-        setCollapsedCategories({});
-
 
         setSubmitting(true);
         setActiveTab('result');
@@ -134,13 +111,7 @@ export default function ProblemPage({ id, statementContent, explanationContent, 
 
 
                             if (event.type === 'test_case_result') {
-                                setTestCaseResults(prevResults =>
-                                    prevResults.map(tc =>
-                                        (tc.testCase === event.testCase && tc.category_name === event.category_name)
-                                            ? { ...tc, ...event } // Merge to keep existing fields if not overwritten
-                                            : tc
-                                    )
-                                );
+                                setTestCaseResults(prev => [...prev, event]);
                             } else if (event.type === 'category_result') {
                                 setCategoryResults(prev => ({
                                     ...prev,
@@ -282,80 +253,65 @@ export default function ProblemPage({ id, statementContent, explanationContent, 
                                     padding: '0.8rem',
                                     marginTop: '1rem',
                                     border: '1px solid #ddd',
-                                    borderRadius: collapsedCategories[categoryName] ? '5px' : '5px 5px 0 0',
+                                    borderRadius: '5px 5px 0 0',
                                     backgroundColor: allPassed ? '#d4edda' : (categoryData ? '#f8d7da' : '#e9ecef'), // Green if all passed, Red if processed and failed, Grey if not yet processed
                                     color: allPassed ? '#155724' : (categoryData ? '#721c24' : '#495057'),
-                                    cursor: 'pointer', // Add cursor pointer to indicate it's clickable
-                                    display: 'flex', // Use flex to align items
-                                    justifyContent: 'space-between', // Space between title and indicator
-                                    alignItems: 'center' // Align items vertically
+                                    borderBottom: 'none'
                                 };
-                                const isCollapsed = collapsedCategories[categoryName];
 
                                 return (
                                     <div key={categoryName} style={{ marginBottom: '1rem' }}>
-                                        <div style={categoryHeaderStyle} onClick={() => toggleCategoryCollapse(categoryName)}>
+                                        <div style={categoryHeaderStyle}>
                                             <h4>{categoryName}: {earnedPoints} / {maxPoints} 点</h4>
-                                            <span>{isCollapsed ? '▶' : '▼'}</span>
                                         </div>
-                                        {!isCollapsed && (
-                                            <>
-                                                <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #ddd', borderTop: 'none' }}>
-                                                    <thead>
-                                                    <tr>
-                                                        <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa' }}>テストケース名</th>
-                                                        <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa' }}>結果</th>
-                                                        <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa' }}>実行時間 (ms)</th>
-                                                        <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa' }}>メモリ (KB)</th>
-                                                    </tr>
-                                                    </thead>
-                                                    <tbody>
-                                            {testCaseResults
-                                                .filter(tc => tc.category_name === categoryName)
-                                                .map((tc, index) => (
-                                                <tr key={`${categoryName}-${tc.testCase}-${index}`} style={{ backgroundColor: index % 2 === 0 ? '#fff' : '#f9f9f9' }}>
-                                                            <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{tc.testCase}</td>
-                                                    <td style={{ border: '1px solid #ccc', padding: '0.5rem', color: tc.status === 'Accepted' ? 'green' : (tc.status === 'Wrong Answer' || tc.status === 'TLE' || tc.status === 'MLE' || tc.status === 'Error' ? 'red' : (tc.status === '判定中' ? 'blue' : 'inherit')) }}>
-                                                                {tc.status}
-                                                        {tc.status === 'Wrong Answer' && tc.expected !== null && tc.got !== null && (
-                                                                    <div style={{fontSize: '0.8em', whiteSpace: 'pre-wrap', maxHeight: '100px', overflowY: 'auto', backgroundColor: '#fff0f0', padding: '5px', marginTop: '5px'}}>
-                                                                <p style={{margin:0}}>Expected: {String(tc.expected)}</p>
-                                                                <p style={{margin:0}}>Got: {String(tc.got)}</p>
-                                                                    </div>
-                                                                )}
-                                                        {(tc.status === 'TLE' || tc.status === 'MLE') && tc.got !== null && (
-                                                                    <div style={{fontSize: '0.8em', whiteSpace: 'pre-wrap', maxHeight: '100px', overflowY: 'auto', backgroundColor: '#fff0f0', padding: '5px', marginTop: '5px'}}>
-                                                                <p style={{margin:0}}>Output: {String(tc.got)}</p>
-                                                                    </div>
-                                                                )}
-                                                        {tc.status === 'Error' && tc.message !== null && (
-                                                                    <div style={{fontSize: '0.8em', whiteSpace: 'pre-wrap', maxHeight: '100px', overflowY: 'auto', backgroundColor: '#fff0f0', padding: '5px', marginTop: '5px'}}>
-                                                                <p style={{margin:0}}>Error: {String(tc.message)}</p>
-                                                                    </div>
-                                                                )}
-                                                            </td>
-                                                    <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{tc.time === null ? (tc.status === "判定中" ? "判定中..." : "-") : tc.time}</td>
-                                                    <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{tc.memory === null ? (tc.status === "判定中" ? "判定中..." : "-") : tc.memory}</td>
-                                                        </tr>
-                                                    ))}
-                                                    </tbody>
-                                                </table>
-                                                {/* This part might need adjustment if initial "判定中" rows are always present */}
-                                                {testCaseResults.filter(tc => tc.category_name === categoryName && tc.status !== "判定中").length === 0 &&
-                                                 allTestCasesMeta.find(cat => cat.categoryName === categoryName)?.testCases.length > 0 &&
-                                                 !submitting && finalResult && /* Only show "no results" if submission is done and still no concrete results */ (
-                                                    <div style={{padding: '0.5rem', textAlign: 'center', border: '1px solid #ddd', borderTop:'none', backgroundColor: '#fff'}}>
-                                                        <p>このカテゴリーのテストケース結果はまだありません (判定完了後)。</p>
-                                                    </div>
-                                                )}
-                                            </>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #ddd' }}>
+                                            <thead>
+                                            <tr>
+                                                <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa' }}>テストケース名</th>
+                                                <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa' }}>結果</th>
+                                                <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa' }}>実行時間 (ms)</th>
+                                                <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa' }}>メモリ (KB)</th>
+                                            </tr>
+                                            </thead>
+                                            <tbody>
+                                            {testCaseResults.filter(tc => tc.category_name === categoryName).map((tc, index) => (
+                                                <tr key={index} style={{ backgroundColor: index % 2 === 0 ? '#fff' : '#f9f9f9' }}>
+                                                    <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{tc.testCase}</td>
+                                                    <td style={{ border: '1px solid #ccc', padding: '0.5rem', color: tc.status === 'Accepted' ? 'green' : (tc.status === 'Wrong Answer' || tc.status === 'TLE' || tc.status === 'MLE' ? 'red' : 'inherit') }}>
+                                                        {tc.status}
+                                                        {tc.status === 'Wrong Answer' && (
+                                                            <div style={{fontSize: '0.8em', whiteSpace: 'pre-wrap', maxHeight: '100px', overflowY: 'auto', backgroundColor: '#fff0f0', padding: '5px', marginTop: '5px'}}>
+                                                                <p style={{margin:0}}>Expected: {tc.expected}</p>
+                                                                <p style={{margin:0}}>Got: {tc.got}</p>
+                                                            </div>
+                                                        )}
+                                                        {(tc.status === 'TLE' || tc.status === 'MLE') && tc.got && (
+                                                            <div style={{fontSize: '0.8em', whiteSpace: 'pre-wrap', maxHeight: '100px', overflowY: 'auto', backgroundColor: '#fff0f0', padding: '5px', marginTop: '5px'}}>
+                                                                <p style={{margin:0}}>Output: {tc.got}</p>
+                                                            </div>
+                                                        )}
+                                                        {tc.status === 'Error' && tc.message && (
+                                                            <div style={{fontSize: '0.8em', whiteSpace: 'pre-wrap', maxHeight: '100px', overflowY: 'auto', backgroundColor: '#fff0f0', padding: '5px', marginTop: '5px'}}>
+                                                                <p style={{margin:0}}>Error: {tc.message}</p>
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                    <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{tc.time ?? '-'}</td>
+                                                    <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{tc.memory ?? '-'}</td>
+                                                </tr>
+                                            ))}
+                                            </tbody>
+                                        </table>
+                                        {testCaseResults.filter(tc => tc.category_name === categoryName).length === 0 && !submitting && (
+                                            <div style={{padding: '0.5rem', textAlign: 'center', border: '1px solid #ddd', borderTop:'none', backgroundColor: '#fff'}}>
+                                                <p>このカテゴリーのテストケース結果はまだありません。</p>
+                                            </div>
                                         )}
                                     </div>
                                 );
                             })}
-                            {/* Show this message only if no submission has been made yet, or if allTestCasesMeta is empty */}
-                            {!submitting && testCaseResults.every(tc => tc.status === "判定中") && (!finalResult || finalResult?.summary?.length === 0) && (!allTestCasesMeta || allTestCasesMeta.length === 0) && (
-                                <p>コードを提出すると、ここに結果が表示されます。</p>
+                            {!submitting && testCaseResults.length === 0 && !finalResult && (
+                                <p>まだ結果がありません。</p>
                             )}
                         </div>
                     )}
@@ -396,25 +352,11 @@ export async function getStaticProps({ params }) {
         explanationContent = fs.readFileSync(explanationPath, 'utf8');
     }
 
-    const metaPath = path.join(problemDir, 'meta.json');
-    let allTestCasesMeta = [];
-    if (fs.existsSync(metaPath)) {
-        const metaContent = fs.readFileSync(metaPath, 'utf8');
-        const meta = JSON.parse(metaContent);
-        if (meta.test_case_categories && Array.isArray(meta.test_case_categories)) {
-            allTestCasesMeta = meta.test_case_categories.map(category => ({
-                categoryName: category.category_name,
-                testCases: category.test_cases.map(tc => path.basename(tc.input, path.extname(tc.input)))
-            }));
-        }
-    }
-
     return {
         props: {
             id: params.id,
             statementContent,
             explanationContent,
-            allTestCasesMeta,
         },
     };
 }
