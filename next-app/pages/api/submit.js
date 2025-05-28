@@ -28,6 +28,17 @@ function copyDirRecursiveSync(src, dest) {
     }
 }
 
+function normalizeOutput(str) {
+    if (typeof str !== 'string') return '';
+    // 1. CR+LF (Windows形式の改行) を LF (Unix形式の改行) に統一
+    let normalized = str.replace(/\r\n/g, '\n');
+    // 2. 末尾にある1つ以上の空白文字（スペース、タブ、改行など）を削除
+    normalized = normalized.replace(/\s+$/, '');
+    // 3. 先頭にある1つ以上の空白文字を削除 (trimの先頭処理部分に相当)
+    normalized = normalized.replace(/^\s+/, '');
+    return normalized;
+}
+
 const MAX_PARALLEL_EXECUTIONS = os.cpus().length > 0 ? os.cpus().length : 2;
 
 export default async function handler(req, res) {
@@ -488,12 +499,17 @@ async function runSingleTestCase(config) {
         } else if (result.memory !== null && problemMemoryLimitKb && result.memory > problemMemoryLimitKb) {
             result.status = 'MLE';
         } else {
-            const expected = expectedOutputContent.trim();
-            if (result.got.trim() === expected) {
+            // No system execution errors, compare output after normalization
+            const normalizedActualOutput = normalizeOutput(result.got);
+            const normalizedExpectedOutput = normalizeOutput(expectedOutputContent);
+
+            if (normalizedActualOutput === normalizedExpectedOutput) {
                 result.status = 'Accepted';
             } else {
                 result.status = 'Wrong Answer';
-                result.expected = expected;
+                // For display, show the original expected output (trimmed) rather than the normalized one.
+                result.expected = expectedOutputContent.trim(); 
+                // result.got already stores the raw (or near-raw) output from the program.
             }
         }
 
