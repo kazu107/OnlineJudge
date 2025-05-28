@@ -14,35 +14,11 @@ case "$LANGUAGE" in
     fi
     ;;
   cpp)
-    if [ "$EXECUTE_ONLY" = "true" ]; then
-      if [ ! -f /code/a.out ]; then
-        echo "Error: /code/a.out not found in execute-only mode." >&2
-        exit 1
-      fi
-      # Execute pre-compiled file
-      if [ -f /code/input.txt ]; then
-        output=$( { /usr/bin/time -f "MEM:%M" /code/a.out < /code/input.txt; } 2>&1 )
-      else
-        output=$( { /usr/bin/time -f "MEM:%M" /code/a.out; } 2>&1 )
-      fi
+    g++ "$CODEFILE" -o a.out
+    if [ -f /code/input.txt ]; then
+      output=$( { /usr/bin/time -f "MEM:%M" ./a.out < /code/input.txt; } 2>&1 )
     else
-      # Compile and execute
-      g++ "$CODEFILE" -o /code/a.out
-      if [ $? -ne 0 ]; then
-        # Capture g++'s error output (which goes to stderr, and will be part of 'output' if time/memusg wraps this whole block)
-        # For now, just signal failure clearly and exit.
-        # The current script structure captures stderr of the entire command block into 'output'.
-        # If g++ fails, its stderr will be in 'output'. The script should then ideally not try to execute.
-        # A simple way is to exit.
-        echo "Error: C++ compilation failed." >&2 # This specific message might be overwritten if output is captured.
-        exit 1 # Exit if compilation fails
-      fi
-      # Execute compiled file
-      if [ -f /code/input.txt ]; then
-        output=$( { /usr/bin/time -f "MEM:%M" /code/a.out < /code/input.txt; } 2>&1 )
-      else
-        output=$( { /usr/bin/time -f "MEM:%M" /code/a.out; } 2>&1 )
-      fi
+      output=$( { /usr/bin/time -f "MEM:%M" ./a.out; } 2>&1 )
     fi
     ;;
   javascript)
@@ -60,30 +36,11 @@ case "$LANGUAGE" in
     fi
     ;;
   java)
-    if [ "$EXECUTE_ONLY" = "true" ]; then
-      if [ ! -f /code/Main.class ]; then
-        echo "Error: /code/Main.class not found in execute-only mode." >&2
-        exit 1
-      fi
-      # Execute pre-compiled class
-      if [ -f /code/input.txt ]; then
-        output=$( { /usr/bin/time -f "MEM:%M" java -cp /code Main < /code/input.txt; } 2>&1 )
-      else
-        output=$( { /usr/bin/time -f "MEM:%M" java -cp /code Main; } 2>&1 )
-      fi
+    javac "$CODEFILE"
+    if [ -f /code/input.txt ]; then
+      output=$( { /usr/bin/time -f "MEM:%M" java Main < /code/input.txt; } 2>&1 )
     else
-      # Compile and execute
-      javac -d /code "$CODEFILE"
-      if [ $? -ne 0 ]; then
-        echo "Error: Java compilation failed." >&2
-        exit 1 # Exit if compilation fails
-      fi
-      # Execute compiled class
-      if [ -f /code/input.txt ]; then
-        output=$( { /usr/bin/time -f "MEM:%M" java -cp /code Main < /code/input.txt; } 2>&1 )
-      else
-        output=$( { /usr/bin/time -f "MEM:%M" java -cp /code Main; } 2>&1 )
-      fi
+      output=$( { /usr/bin/time -f "MEM:%M" java Main; } 2>&1 )
     fi
     ;;
   *)
