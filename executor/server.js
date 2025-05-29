@@ -33,6 +33,19 @@ app.post('/run', (req, res) => {
     // 出力の最後に "TIME_MS:<実行時間> MEM:<メモリ使用量>" を出力するようにしている前提）
     exec(`./run.sh ${language} ${solutionPath}`, { cwd: tmpDir }, (error, stdout, stderr) => {
         fs.rmSync(tmpDir, { recursive: true, force: true });
+          /* --- Windows の “EBUSY” 対策：リトライ付きで削除 ---------------- */
+        const tryRemove = (retry = 3) => {
+               try {
+                   fs.rmSync(tcDir, { recursive: true, force: true });
+               } catch (e) {
+                     if ((e.code === 'EBUSY' || e.code === 'EPERM') && retry > 0) {
+                           setTimeout(() => tryRemove(retry - 1), 100);   // 100 ms 後に再試行
+                           return;
+                         }
+                     throw e;   // その他のエラーはそのまま投げる
+                   }
+             };
+         tryRemove();
         if (error) {
             return res.status(500).json({ error: stderr || error.message });
         }
