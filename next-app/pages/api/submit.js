@@ -1,8 +1,15 @@
-// next-app/pages/api/submit.js
+/* next-app/pages/api/submit.js */
 import { exec } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+
+/* ──────────────────────────────────────────────
+   並列実行の上限
+   - 既定値 : CPU コア数の半分（最低 1）
+   - 環境変数 MAX_PARALLEL で上書き可
+────────────────────────────────────────────── */
+const MAX_PARALLEL = 1;
 
 export default async function handler(req, res) {
     if (req.method !== 'POST') {
@@ -10,16 +17,13 @@ export default async function handler(req, res) {
         return;
     }
 
-    // SSE 用ヘッダー設定
+    /* ───── SSE ヘッダー ───── */
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
+    const flush = () => res.flush && res.flush();
 
-    // すぐにフラッシュするヘルパー
-    const flush = () => {
-        if (res.flush) res.flush();
-    };
-
+    /* ───── パラメータ取得 ───── */
     const { problemId, language, code } = req.body;
     if (!problemId || !language || !code) {
         res.write(`data: ${JSON.stringify({ error: 'Missing parameters' })}\n\n`);
@@ -28,27 +32,27 @@ export default async function handler(req, res) {
         return;
     }
 
-    // 一時ディレクトリ作成
+    /* ───── 一時ディレクトリ ───── */
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'submission-'));
 
-    // 言語に応じたファイル名決定
-    let filename = '';
-    switch (language) {
-        case 'python': filename = 'solution.py'; break;
-        case 'cpp': filename = 'solution.cpp'; break;
-        case 'javascript': filename = 'solution.js'; break;
-        case 'ruby': filename = 'solution.rb'; break;
-        case 'java': filename = 'Main.java'; break;
-        default:
-            res.write(`data: ${JSON.stringify({ error: 'Unsupported language' })}\n\n`);
-            flush();
-            res.end();
-            return;
+    /* ───── ファイル名決定 ───── */
+    const LANG_FILENAME = {
+        python: 'solution.py',
+        cpp: 'solution.cpp',
+        javascript: 'solution.js',
+        ruby: 'solution.rb',
+        java: 'Main.java',
+    };
+    const filename = LANG_FILENAME[language];
+    if (!filename) {
+        res.write(`data: ${JSON.stringify({ error: 'Unsupported language' })}\n\n`);
+        flush();
+        res.end();
+        return;
     }
-    const solutionPath = path.join(tmpDir, filename);
-    fs.writeFileSync(solutionPath, code);
+    fs.writeFileSync(path.join(tmpDir, filename), code);
 
-    // 問題 meta.json の読み込み
+    /* ───── 問題メタ読み込み ───── */
     const metaPath = path.join(process.cwd(), 'problems', problemId, 'meta.json');
     if (!fs.existsSync(metaPath)) {
         res.write(`data: ${JSON.stringify({ error: 'Problem meta not found' })}\n\n`);
@@ -57,219 +61,241 @@ export default async function handler(req, res) {
         return;
     }
     const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
-    const categories = meta.test_case_categories;
-    const timeout = meta.timeout || 2000; // Keep timeout at problem level
-    const memory_limit_kb = meta.memory_limit_kb; // Keep memory limit at problem level
+    const { test_case_categories: categories, timeout = 2000, memory_limit_kb } =
+        meta;
 
-    if (!categories || !Array.isArray(categories)) {
-        res.write(`data: ${JSON.stringify({ type: 'error', message: 'Invalid problem metadata: test_case_categories not found or not an array' })}\n\n`);
+    if (!Array.isArray(categories)) {
+        res.write(
+            `data: ${JSON.stringify({
+                error:
+                    'Invalid problem metadata: test_case_categories not found or not an array',
+            })}\n\n`
+        );
         flush();
         fs.rmSync(tmpDir, { recursive: true, force: true });
         res.end();
         return;
     }
 
-    // Construct and send test_suite_info event
-    const testSuiteInfo = {
-        type: 'test_suite_info',
-        data: {
-            categories: categories.map(category => ({
-                name: category.category_name,
-                test_cases: category.test_cases.map(tc => path.basename(tc.input))
-            }))
-        }
-    };
-    res.write(`data: ${JSON.stringify(testSuiteInfo)}\n\n`);
+    /* ───── テストスイート構造を通知 ───── */
+    res.write(
+        `data: ${JSON.stringify({
+            type: 'test_suite_info',
+            data: {
+                categories: categories.map((c) => ({
+                    name: c.category_name,
+                    test_cases: c.test_cases.map((tc) => path.basename(tc.input)),
+                })),
+            },
+        })}\n\n`
+    );
     flush();
 
+    /* ───── 各カテゴリーを処理 ───── */
     let totalPointsEarned = 0;
-    const maxTotalPoints = categories.reduce((sum, cat) => sum + (cat.points || 0), 0);
+    const maxTotalPoints = categories.reduce(
+        (s, c) => s + (c.points || 0),
+        0
+    );
     const categorySummaries = [];
 
     for (const category of categories) {
-        let categoryPointsAwarded = category.points || 0; // Points for this category
-        let allTestsInThisCategoryPassed = true;
-        // const testCaseResultsInCategory = []; // Optional: if sending all results again in category_result
+        let pointsAwarded = category.points || 0;
+        let allPassed = true;
 
-        for (const testCase of category.test_cases) {
-            const testCaseName = path.basename(testCase.input);
-            const inputFilePath = path.join(process.cwd(), testCase.input);
+        const total = category.test_cases.length;
+        const results = new Array(total); // インデックス順保持
 
-            if (!fs.existsSync(inputFilePath)) {
-                const errorResult = {
-                    type: 'test_case_result',
-                    category_name: category.category_name,
-                    testCase: testCaseName,
-                    status: 'Error',
-                    message: 'Input file not found'
-                };
-                res.write(`data: ${JSON.stringify(errorResult)}\n\n`);
+        /* ----- MAX_PARALLEL 件ずつ実行 ----- */
+        for (let start = 0; start < total; start += MAX_PARALLEL) {
+            const slice = category.test_cases.slice(start, start + MAX_PARALLEL);
+
+            await Promise.all(
+                slice.map((tc, offset) =>
+                    runTestCaseParallel({
+                        testCase: tc,
+                        category,
+                        idx: start + offset,
+                        tmpDir,
+                        filename,
+                        language,
+                        timeout,
+                        memory_limit_kb,
+                    }).then((r) => {
+                        results[start + offset] = r;
+                    })
+                )
+            );
+
+            /* バッチ完了 → 元の順番で SSE 送信 */
+            for (
+                let i = start;
+                i < Math.min(start + MAX_PARALLEL, total);
+                i++
+            ) {
+                const r = results[i];
+                res.write(`data: ${JSON.stringify(r)}\n\n`);
                 flush();
-                allTestsInThisCategoryPassed = false;
-                // testCaseResultsInCategory.push(errorResult);
-                continue;
+                if (r.status !== 'Accepted') allPassed = false;
             }
-            const inputContent = fs.readFileSync(inputFilePath, 'utf8');
-            fs.writeFileSync(path.join(tmpDir, 'input.txt'), inputContent);
-
-            const dockerCmd = `docker run --rm -v ${tmpDir}:/code executor ${language} /code/${filename}`;
-            let currentTestCaseResult = {};
-
-            try {
-                let execResult = await execCommand(dockerCmd, timeout);
-                let output = '';
-                let execTimeMs = null;
-                let memUsage = null;
-                let testStatus = '';
-
-                const combinedOutput = (execResult.stdout || '') + "\n" + (execResult.stderr || '');
-                if (typeof combinedOutput === 'string' && combinedOutput.trim() !== '') {
-                    const lines = combinedOutput.trim().split('\n');
-                    const lastLine = lines[lines.length - 1];
-                    const timeRegex = /^TIME_MS:(\d+)\s+MEM:(\d+)$/;
-                    const match = lastLine.match(timeRegex);
-                    if (match) {
-                        execTimeMs = match[1];
-                        memUsage = match[2];
-                        if (execResult.tle) {
-                            output = lines.slice(0, -1).join('\n').trim();
-                        }
-                    } else {
-                        if(execResult.tle){
-                            output = combinedOutput.trim();
-                        }
-                    }
-                }
-
-                if (execResult.tle) {
-                    testStatus = 'TLE';
-                    if (output === '' && typeof combinedOutput === 'string') output = combinedOutput.trim();
-                } else {
-                    output = execResult; // execResult is a string here
-                    const lines = output.trim().split('\n');
-                    const lastLine = lines[lines.length - 1];
-                    const timeRegex = /^TIME_MS:(\d+)\s+MEM:(\d+)$/;
-                    const match = lastLine.match(timeRegex);
-                    if (match) {
-                        execTimeMs = match[1];
-                        memUsage = match[2];
-                        lines.pop();
-                        output = lines.join('\n').trim();
-                    }
-
-                    if (memory_limit_kb && memUsage && parseInt(memUsage, 10) > memory_limit_kb) {
-                        testStatus = 'MLE';
-                    } else {
-                        const expectedOutputPath = path.join(process.cwd(), testCase.output);
-                        if (!fs.existsSync(expectedOutputPath)) {
-                            testStatus = 'Error';
-                            currentTestCaseResult.message = 'Expected output file not found';
-                        } else {
-                            const expectedOutput = fs.readFileSync(expectedOutputPath, 'utf8').trim();
-                            if (output.trim() === expectedOutput) {
-                                testStatus = 'Accepted';
-                            } else {
-                                testStatus = 'Wrong Answer';
-                                currentTestCaseResult.expected = expectedOutput;
-                            }
-                        }
-                    }
-                }
-
-                currentTestCaseResult = {
-                    ...currentTestCaseResult,
-                    type: 'test_case_result',
-                    category_name: category.category_name,
-                    testCase: testCaseName,
-                    status: testStatus,
-                    time: execTimeMs,
-                    memory: memUsage,
-                    got: output // Always include 'got' for WA, TLE, MLE, and even Accepted if desired
-                };
-
-                if (testStatus === 'TLE') {
-                    currentTestCaseResult.signal = execResult.signal;
-                    currentTestCaseResult.killed = execResult.killed;
-                }
-                // 'expected' is added for WA inside the logic block
-                // 'message' is added for Error inside the logic block or catch block
-
-            } catch (err) { // Catch errors from execCommand or other issues
-                currentTestCaseResult = {
-                    type: 'test_case_result',
-                    category_name: category.category_name,
-                    testCase: testCaseName,
-                    status: 'Error',
-                    message: err.toString()
-                };
-            }
-
-            res.write(`data: ${JSON.stringify(currentTestCaseResult)}\n\n`);
-            flush();
-            // testCaseResultsInCategory.push(currentTestCaseResult);
-
-            if (currentTestCaseResult.status !== 'Accepted') {
-                allTestsInThisCategoryPassed = false;
-            }
-        } // End of test cases loop for a category
-
-        if (!allTestsInThisCategoryPassed) {
-            categoryPointsAwarded = 0;
         }
-        totalPointsEarned += categoryPointsAwarded;
 
-        const categoryResultEvent = {
-            type: 'category_result',
-            category_name: category.category_name,
-            category_points_earned: categoryPointsAwarded,
-            category_max_points: category.points || 0,
-            all_tests_in_category_passed: allTestsInThisCategoryPassed,
-            // test_case_results_in_category: testCaseResultsInCategory // Optional
-        };
-        res.write(`data: ${JSON.stringify(categoryResultEvent)}\n\n`);
+        if (!allPassed) pointsAwarded = 0;
+        totalPointsEarned += pointsAwarded;
+
+        res.write(
+            `data: ${JSON.stringify({
+                type: 'category_result',
+                category_name: category.category_name,
+                category_points_earned: pointsAwarded,
+                category_max_points: category.points || 0,
+                all_tests_in_category_passed: allPassed,
+            })}\n\n`
+        );
         flush();
 
         categorySummaries.push({
             category_name: category.category_name,
-            points_earned: categoryPointsAwarded,
-            max_points: category.points || 0
+            points_earned: pointsAwarded,
+            max_points: category.points || 0,
         });
-    } // End of categories loop
+    }
 
+    /* ───── 片付け＋最終結果 ───── */
     fs.rmSync(tmpDir, { recursive: true, force: true });
-
-    const finalResultEvent = {
-        type: 'final_result',
-        total_points_earned: totalPointsEarned,
-        max_total_points: maxTotalPoints,
-        category_summary: categorySummaries
-    };
-    res.write(`data: ${JSON.stringify(finalResultEvent)}\n\n`);
+    res.write(
+        `data: ${JSON.stringify({
+            type: 'final_result',
+            total_points_earned: totalPointsEarned,
+            max_total_points: maxTotalPoints,
+            category_summary: categorySummaries,
+        })}\n\n`
+    );
     flush();
     res.end();
 }
 
+/* ──────────────────────────────────────────────
+   テストケースを 1 件だけ実行するヘルパー
+────────────────────────────────────────────── */
+async function runTestCaseParallel({
+                                       testCase,
+                                       category,
+                                       idx,
+                                       tmpDir,
+                                       filename,
+                                       language,
+                                       timeout,
+                                       memory_limit_kb,
+                                   }) {
+    const name = path.basename(testCase.input);
+
+    /* -- 専用サブディレクトリを用意 -- */
+    const tcDir = fs.mkdtempSync(path.join(tmpDir, `tc-${idx}-`));
+    fs.copyFileSync(path.join(tmpDir, filename), path.join(tcDir, filename));
+
+    /* -- 入力ファイル配置 -- */
+    const inputSrc = path.join(process.cwd(), testCase.input);
+    if (!fs.existsSync(inputSrc)) {
+        fs.rmSync(tcDir, { recursive: true, force: true });
+        return {
+            type: 'test_case_result',
+            category_name: category.category_name,
+            testCase: name,
+            status: 'Error',
+            message: 'Input file not found',
+        };
+    }
+    fs.writeFileSync(
+        path.join(tcDir, 'input.txt'),
+        fs.readFileSync(inputSrc, 'utf8')
+    );
+
+    /* -- Docker 実行 -- */
+    const dockerCmd = `docker run --rm -v ${tcDir}:/code executor ${language} /code/${filename}`;
+    let execOut;
+    try {
+        execOut = await execCommand(dockerCmd, timeout * 4);
+    } catch (e) {
+        fs.rmSync(tcDir, { recursive: true, force: true });
+        return {
+            type: 'test_case_result',
+            category_name: category.category_name,
+            testCase: name,
+            status: 'Error',
+            message: e.toString(),
+        };
+    }
+
+    /* -- 判定ロジック -- */
+    let output = '';
+    let timeMs = null;
+    let memKb = null;
+    let status = '';
+
+    const combined = (execOut.stdout || '') + '\n' + (execOut.stderr || '');
+    if (combined.trim()) {
+        const lines = combined.trim().split('\n');
+        const last = lines[lines.length - 1];
+        const m = last.match(/^TIME_MS:(\d+)\s+MEM:(\d+)$/);
+        if (m) {
+            timeMs = m[1];
+            memKb = m[2];
+            output = lines.slice(0, -1).join('\n').trim();
+        } else {
+            output = combined.trim();
+        }
+    }
+
+    if (execOut.tle) {
+        status = 'TLE';
+    } else {
+        const expectedPath = path.join(process.cwd(), testCase.output);
+        if (!fs.existsSync(expectedPath)) {
+            status = 'Error';
+        } else if (
+            output.trim() === fs.readFileSync(expectedPath, 'utf8').trim()
+        ) {
+            status = 'Accepted';
+        } else {
+            status = 'Wrong Answer';
+        }
+        if (memory_limit_kb && memKb && +memKb > memory_limit_kb) status = 'MLE';
+    }
+
+    fs.rmSync(tcDir, { recursive: true, force: true });
+
+    return {
+        type: 'test_case_result',
+        category_name: category.category_name,
+        testCase: name,
+        status,
+        time: timeMs,
+        memory: memKb,
+        got: output,
+    };
+}
+
+/* ──────────────────────────────────────────────
+   child_process.exec を Promise 化
+────────────────────────────────────────────── */
 function execCommand(cmd, timeout) {
     return new Promise((resolve, reject) => {
-        exec(cmd, { timeout: timeout }, (error, stdout, stderr) => {
-            if (error) {
-                // Check for TLE conditions
-                if (error.signal === 'SIGTERM' || error.code === 'ETIMEDOUT') {
-                    // For TLE, we still want to capture any stdout/stderr produced
+        exec(cmd, {timeout, maxBuffer: 10 * 1024 * 1024}, (err, stdout, stderr) => {
+            if (err) {
+                if (err.signal === 'SIGTERM' || err.code === 'ETIMEDOUT') {
                     resolve({
                         tle: true,
-                        killed: error.killed,
-                        signal: error.signal,
+                        killed: err.killed,
+                        signal: err.signal,
                         stdout: stdout || '',
-                        stderr: stderr || ''
+                        stderr: stderr || '',
                     });
                 } else {
-                    // For other errors, reject as before
-                    reject(stderr || error.message);
+                    reject(stderr || err.message);
                 }
             } else {
-                // Success case
-                resolve((stdout || '') + "\n" + (stderr || ''));
+                resolve({ stdout: stdout || '', stderr: stderr || '' });
             }
         });
     });
