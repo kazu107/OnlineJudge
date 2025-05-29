@@ -72,8 +72,7 @@ def solve_tsp():
 
     # 最短経路(都市の番号リスト)を1行ずつ出力
     if best_path_for_evaluator:
-        for city_num_1_indexed in best_path_for_evaluator:
-            print(city_num_1_indexed)
+        print(*(best_path_for_evaluator))
     # Fallback for N=0 or N=1 if not handled, though N=1 is handled.
 
 if __name__ == "__main__":
