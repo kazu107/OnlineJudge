@@ -1,5 +1,5 @@
 // next-app/pages/problems/[id].js
-import { useState } from 'react';
+import { useState, useEffect } from 'react'; // useEffect をインポート
 import fs from 'fs';
 import path from 'path';
 import ReactMarkdown from 'react-markdown';
@@ -55,7 +55,7 @@ function MarkdownRenderer({ content }) {
     );
 }
 
-export default function ProblemPage({ id, statementContent, explanationContent }) {
+export default function ProblemPage({ id, statementContent, explanationContent, problemMeta }) { // problemMeta を props で受け取る
     const [activeTab, setActiveTab] = useState('problem');
     const [language, setLanguage] = useState('python');
     const [code, setCode] = useState('');
@@ -68,6 +68,21 @@ export default function ProblemPage({ id, statementContent, explanationContent }
     const [openCategories, setOpenCategories] = useState({}); // For accordion UI
 
     const [submitting, setSubmitting] = useState(false);
+
+    // problemMeta をもとに、カスタム評価問題かどうかを判定するフラグ
+    // const isCustomScoredProblem = problemMeta && problemMeta.evaluation_mode === "custom"; // Not strictly needed for this step's specific changes
+    const isTspProblem = problemMeta && problemMeta.problem_id === "tsp";
+
+    // id が変更されたら結果をクリアし、タブを問題文に戻す (これは本来 getStaticProps が id を変えて再実行される前提)
+    useEffect(() => {
+        setTestCaseResults([]);
+        setCategoryResults({});
+        setFinalResult(null);
+        setTestSuite(null);
+        setOpenCategories({});
+        setActiveTab('problem');
+    }, [id]);
+
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -140,12 +155,14 @@ export default function ProblemPage({ id, statementContent, explanationContent }
                                 setFinalResult({
                                     total_earned: event.total_points_earned,
                                     max_total: event.max_total_points,
-                                    summary: event.category_summary // Store summary for rendering order
+                                    summary: event.category_summary, // Store summary for rendering order
+                                    final_raw_distance: event.final_raw_distance // <--- final_raw_distance を保存
                                 });
                                 setSubmitting(false); // Submission processing finished
                             } else if (event.error) { // Handle backend error messages
                                 console.error('Backend error event:', event.error);
-                                setFinalResult({ error: event.error }); // Indicate error in final result
+                                // Ensure error state is clear and doesn't carry over old success values
+                                setFinalResult({ error: event.error, total_earned: undefined, max_total: undefined, final_raw_distance: undefined }); 
                                 setSubmitting(false);
                             }
                         } catch (err) {
@@ -257,9 +274,15 @@ export default function ProblemPage({ id, statementContent, explanationContent }
                                 </div>
                             )}
 
-                            {finalResult && finalResult.total_earned !== undefined && (
+                            {finalResult && finalResult.total_earned !== undefined && !finalResult.error && (
                                 <div style={{ margin: '1rem 0', padding: '1rem', backgroundColor: '#e6f7ff', border: '1px solid #91d5ff', borderRadius: '5px' }}>
-                                    <h3>総合得点: {finalResult.total_earned} / {finalResult.max_total} 点</h3>
+                                    <h3>
+                                        {(isTspProblem && finalResult.final_raw_distance !== undefined && finalResult.final_raw_distance !== null) ? 
+                                            `総距離: ${finalResult.final_raw_distance.toFixed(4)} (スコア: ${finalResult.total_earned})` 
+                                            : 
+                                            `総合得点: ${finalResult.total_earned} / ${finalResult.max_total}`
+                                        }
+                                    </h3>
                                 </div>
                             )}
 
@@ -311,6 +334,7 @@ export default function ProblemPage({ id, statementContent, explanationContent }
                                                 <tr>
                                                     <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa' }}>テストケース名</th>
                                                     <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa' }}>結果</th>
+                                                    {isTspProblem && <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa' }}>距離</th>}
                                                     <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa' }}>実行時間 (ms)</th>
                                                     <th style={{ border: '1px solid #ccc', padding: '0.5rem', backgroundColor: '#f8f9fa' }}>メモリ (KB)</th>
                                                 </tr>
@@ -320,6 +344,7 @@ export default function ProblemPage({ id, statementContent, explanationContent }
                                                 {currentCategoryInSuite ? testCasesForThisCategory.map((tcName, index) => {
                                                     const result = actualResultsForThisCategory.find(r => r.testCase === tcName);
                                                     const status = result?.status || '判定中';
+                                                    const raw_distance = result?.raw_distance; // For TSP
                                                     const time = result?.time ?? '-';
                                                     const memory = result?.memory ?? '-';
                                                     const got = result?.got;
@@ -348,6 +373,7 @@ export default function ProblemPage({ id, statementContent, explanationContent }
                                                                     </div>
                                                                 )}
                                                             </td>
+                                                            {isTspProblem && <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{raw_distance !== null && raw_distance !== undefined ? raw_distance.toFixed(4) : '-'}</td>}
                                                             <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{time}</td>
                                                             <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{memory}</td>
                                                         </tr>
@@ -355,10 +381,11 @@ export default function ProblemPage({ id, statementContent, explanationContent }
                                                 }) : actualResultsForThisCategory.map((tc, index) => ( // Fallback if testSuite not loaded yet but results are coming
                                                     <tr key={`${categoryName}-${tc.testCase}-${index}`} style={{ backgroundColor: index % 2 === 0 ? '#fff' : '#f9f9f9' }}>
                                                         <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{tc.testCase}</td>
-                                                        <td style={{ border: '1px solid #ccc', padding: '0.5rem', color: tc.status === 'Accepted' ? 'green' : (tc.status === 'Wrong Answer' || tc.status === 'TLE' || tc.status === 'MLE' ? 'red' : 'inherit') }}>
+                                                        <td style={{ border: '1px solid #ccc', padding: '0.5rem', color: (tc.status === 'Accepted' || tc.status === 'Scored') ? 'green' : (tc.status === 'Wrong Answer' || tc.status === 'TLE' || tc.status === 'MLE' || tc.status === 'Error' ? 'red' : 'inherit') }}>
                                                             {tc.status}
                                                             {/* ... existing detail display logic ... */}
                                                         </td>
+                                                        {isTspProblem && <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{tc.raw_distance !== null && tc.raw_distance !== undefined ? tc.raw_distance.toFixed(4) : '-'}</td>}
                                                         <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{tc.time ?? '-'}</td>
                                                         <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{tc.memory ?? '-'}</td>
                                                     </tr>
@@ -366,7 +393,7 @@ export default function ProblemPage({ id, statementContent, explanationContent }
                                                 {/* Show if no test cases defined in testSuite for this category, or if testSuite not loaded */}
                                                 {(!currentCategoryInSuite || testCasesForThisCategory.length === 0) && actualResultsForThisCategory.length === 0 && (
                                                     <tr>
-                                                        <td colSpan="4" style={{ padding: '0.5rem', textAlign: 'center', border: '1px solid #ccc', backgroundColor: '#fff'}}>
+                                                        <td colSpan={isTspProblem ? 5 : 4} style={{ padding: '0.5rem', textAlign: 'center', border: '1px solid #ccc', backgroundColor: '#fff'}}>
                                                             {submitting ? 'テストケースを読み込んでいます...' : 'このカテゴリーのテストケース結果はありません。'}
                                                         </td>
                                                     </tr>
@@ -403,19 +430,47 @@ export default function ProblemPage({ id, statementContent, explanationContent }
 // getStaticPaths: 問題フォルダ内の問題一覧を読み込む例
 export async function getStaticPaths() {
     const problemsDir = path.join(process.cwd(), 'problems');
-    const files = fs.readdirSync(problemsDir);
-    const paths = files.map((file) => ({ params: { id: file } }));
-    return { paths, fallback: false };
+    let problemIds = [];
+    try {
+        const allEntries = fs.readdirSync(problemsDir, { withFileTypes: true });
+        problemIds = allEntries
+            .filter(dirent => dirent.isDirectory())
+            .map(dirent => dirent.name)
+            .filter(id => fs.existsSync(path.join(problemsDir, id, 'meta.json'))); // Ensure meta.json exists
+    } catch (error) {
+        console.error("Error reading problems directory for getStaticPaths:", error);
+    }
+    const paths = problemIds.map((id) => ({ params: { id } }));
+    return { paths, fallback: 'blocking' }; // 'blocking' for better UX on new paths
 }
 
 // getStaticProps: 指定された問題フォルダ内の Markdown ファイルを読み込む例
 export async function getStaticProps({ params }) {
     const problemDir = path.join(process.cwd(), 'problems', params.id);
     const statementPath = path.join(problemDir, 'statement.md');
-    const statementContent = fs.readFileSync(statementPath, 'utf8');
-
-    let explanationContent = '';
     const explanationPath = path.join(problemDir, 'explanation.md');
+    const metaPath = path.join(problemDir, 'meta.json');
+
+    let statementContent = '', explanationContent = '', problemMeta = null;
+
+    if (fs.existsSync(metaPath)) {
+        try {
+            problemMeta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+        } catch (error) {
+            console.error(`Error parsing meta.json for problem ${params.id}:`, error);
+            return { notFound: true }; // Essential file missing or corrupt
+        }
+    } else {
+        console.warn(`meta.json not found for problem ${params.id}`);
+        return { notFound: true }; // meta.json is crucial
+    }
+
+    if (fs.existsSync(statementPath)) {
+        statementContent = fs.readFileSync(statementPath, 'utf8');
+    } else {
+        console.warn(`statement.md not found for problem ${params.id}`);
+    }
+
     if (fs.existsSync(explanationPath)) {
         explanationContent = fs.readFileSync(explanationPath, 'utf8');
     }
@@ -425,6 +480,8 @@ export async function getStaticProps({ params }) {
             id: params.id,
             statementContent,
             explanationContent,
+            problemMeta, // Pass problemMeta to the page component
         },
+        revalidate: 60, // Optional: re-generate the page if content changes
     };
 }
