@@ -60,11 +60,11 @@ export default function ProblemPage({ id, statementContent, explanationContent }
     const [language, setLanguage] = useState('python');
     const [code, setCode] = useState('');
 
-    // New state for displaying all test cases with their statuses
-    const [displayedResults, setDisplayedResults] = useState([]);
+    // Updated state variables for category-based results
+    const [testCaseResults, setTestCaseResults] = useState([]); // Individual test case results
     const [categoryResults, setCategoryResults] = useState({}); // { categoryName: { earned: 0, max: 0, allPassed: false }, ... }
     const [finalResult, setFinalResult] = useState(null); // { total_earned: 0, max_total: 0, summary: [] }
-    const [testSuite, setTestSuite] = useState(null); // Structure of all test cases (from test_suite_info)
+    const [testSuite, setTestSuite] = useState(null); // Structure of all test cases
     const [openCategories, setOpenCategories] = useState({}); // For accordion UI
 
     const [submitting, setSubmitting] = useState(false);
@@ -72,11 +72,11 @@ export default function ProblemPage({ id, statementContent, explanationContent }
     const handleSubmit = async (e) => {
         e.preventDefault();
         // Clear previous results
-        setTestSuite(null);
-        setDisplayedResults([]); // Initialize/clear displayed results
+        setTestSuite(null); // Clear test suite structure
+        setTestCaseResults([]);
         setCategoryResults({});
         setFinalResult(null);
-        setOpenCategories({});
+        setOpenCategories({}); // Reset open categories
 
         setSubmitting(true);
         setActiveTab('result');
@@ -114,42 +114,19 @@ export default function ProblemPage({ id, statementContent, explanationContent }
                             const event = JSON.parse(jsonStr);
 
                             if (event.type === 'test_suite_info') {
-                                setTestSuite(event.data); // Keep testSuite for category structure if needed elsewhere
-                                const initialResults = [];
+                                setTestSuite(event.data);
+                                setTestCaseResults([]); // Reset for new submission
+                                setCategoryResults({}); // Reset for new submission
+                                // Initialize all categories to be open by default
                                 const initialOpenCategories = {};
                                 if (event.data && event.data.categories) {
-                                    event.data.categories.forEach(category => {
-                                        initialOpenCategories[category.name] = true; // Default to open
-                                        category.test_cases.forEach(tcName => {
-                                            initialResults.push({
-                                                categoryName: category.name,
-                                                testCaseName: tcName,
-                                                status: '判定待ち',
-                                                time: null,
-                                                memory: null,
-                                            });
-                                        });
+                                    event.data.categories.forEach(cat => {
+                                        initialOpenCategories[cat.name] = true;
                                     });
                                 }
-                                setDisplayedResults(initialResults);
                                 setOpenCategories(initialOpenCategories);
-                                setCategoryResults({}); // Reset category specific results
                             } else if (event.type === 'test_case_result') {
-                                setDisplayedResults(prevResults =>
-                                    prevResults.map(r =>
-                                        r.categoryName === event.category_name && r.testCaseName === event.testCase
-                                            ? {
-                                                ...r,
-                                                status: event.status,
-                                                time: event.time,
-                                                memory: event.memory,
-                                                got: event.got,
-                                                expected: event.expected,
-                                                message: event.message,
-                                            }
-                                            : r
-                                    )
-                                );
+                                setTestCaseResults(prev => [...prev, event]);
                             } else if (event.type === 'category_result') {
                                 setCategoryResults(prev => ({
                                     ...prev,
@@ -316,10 +293,9 @@ export default function ProblemPage({ id, statementContent, explanationContent }
                                     borderBottom: openCategories[categoryName] ? 'none' : '1px solid #ddd'
                                 };
 
-                                // Filter displayedResults for the current category
-                                const testCasesForThisCategoryInDisplayedResults = displayedResults.filter(
-                                    r => r.categoryName === categoryName
-                                );
+                                const testCasesForThisCategory = currentCategoryInSuite?.test_cases || [];
+                                // Get actual results for test cases in this category
+                                const actualResultsForThisCategory = testCaseResults.filter(tc => tc.category_name === categoryName);
 
                                 return (
                                     <div key={categoryName} style={{ marginBottom: '1rem' }}>
@@ -340,37 +316,58 @@ export default function ProblemPage({ id, statementContent, explanationContent }
                                                 </tr>
                                                 </thead>
                                                 <tbody>
-                                                {testCasesForThisCategoryInDisplayedResults.length > 0 ? (
-                                                    testCasesForThisCategoryInDisplayedResults.map((result, index) => (
-                                                        <tr key={`${categoryName}-${result.testCaseName}-${index}`} style={{ backgroundColor: index % 2 === 0 ? '#fff' : '#f9f9f9' }}>
-                                                            <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{result.testCaseName}</td>
-                                                            <td style={{ border: '1px solid #ccc', padding: '0.5rem', color: result.status === 'Accepted' ? 'green' : (result.status === 'Wrong Answer' || result.status === 'TLE' || result.status === 'MLE' || result.status === 'Error' ? 'red' : 'inherit') }}>
-                                                                {result.status}
-                                                                {result.status === 'Wrong Answer' && (
+                                                {/* If testSuite is available, map through its test cases first to show all of them */}
+                                                {currentCategoryInSuite ? testCasesForThisCategory.map((tcName, index) => {
+                                                    const result = actualResultsForThisCategory.find(r => r.testCase === tcName);
+                                                    const status = result?.status || '判定中';
+                                                    const time = result?.time ?? '-';
+                                                    const memory = result?.memory ?? '-';
+                                                    const got = result?.got;
+                                                    const expected = result?.expected;
+                                                    const message = result?.message;
+
+                                                    return (
+                                                        <tr key={`${categoryName}-${tcName}-${index}`} style={{ backgroundColor: index % 2 === 0 ? '#fff' : '#f9f9f9' }}>
+                                                            <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{tcName}</td>
+                                                            <td style={{ border: '1px solid #ccc', padding: '0.5rem', color: status === 'Accepted' ? 'green' : (status === 'Wrong Answer' || status === 'TLE' || status === 'MLE' ? 'red' : 'inherit') }}>
+                                                                {status}
+                                                                {status === 'Wrong Answer' && (
                                                                     <div style={{fontSize: '0.8em', whiteSpace: 'pre-wrap', maxHeight: '100px', overflowY: 'auto', backgroundColor: '#fff0f0', padding: '5px', marginTop: '5px'}}>
-                                                                        <p style={{margin:0}}>Expected: {result.expected}</p>
-                                                                        <p style={{margin:0}}>Got: {result.got}</p>
+                                                                        <p style={{margin:0}}>Expected: {expected}</p>
+                                                                        <p style={{margin:0}}>Got: {got}</p>
                                                                     </div>
                                                                 )}
-                                                                {(result.status === 'TLE' || result.status === 'MLE') && result.got && (
+                                                                {(status === 'TLE' || status === 'MLE') && got && (
                                                                     <div style={{fontSize: '0.8em', whiteSpace: 'pre-wrap', maxHeight: '100px', overflowY: 'auto', backgroundColor: '#fff0f0', padding: '5px', marginTop: '5px'}}>
-                                                                        <p style={{margin:0}}>Output: {result.got}</p>
+                                                                        <p style={{margin:0}}>Output: {got}</p>
                                                                     </div>
                                                                 )}
-                                                                {result.status === 'Error' && result.message && (
+                                                                {status === 'Error' && message && (
                                                                     <div style={{fontSize: '0.8em', whiteSpace: 'pre-wrap', maxHeight: '100px', overflowY: 'auto', backgroundColor: '#fff0f0', padding: '5px', marginTop: '5px'}}>
-                                                                        <p style={{margin:0}}>Error: {result.message}</p>
+                                                                        <p style={{margin:0}}>Error: {message}</p>
                                                                     </div>
                                                                 )}
                                                             </td>
-                                                            <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{result.time ?? '-'}</td>
-                                                            <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{result.memory ?? '-'}</td>
+                                                            <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{time}</td>
+                                                            <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{memory}</td>
                                                         </tr>
-                                                    ))
-                                                ) : (
+                                                    );
+                                                }) : actualResultsForThisCategory.map((tc, index) => ( // Fallback if testSuite not loaded yet but results are coming
+                                                    <tr key={`${categoryName}-${tc.testCase}-${index}`} style={{ backgroundColor: index % 2 === 0 ? '#fff' : '#f9f9f9' }}>
+                                                        <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{tc.testCase}</td>
+                                                        <td style={{ border: '1px solid #ccc', padding: '0.5rem', color: tc.status === 'Accepted' ? 'green' : (tc.status === 'Wrong Answer' || tc.status === 'TLE' || tc.status === 'MLE' ? 'red' : 'inherit') }}>
+                                                            {tc.status}
+                                                            {/* ... existing detail display logic ... */}
+                                                        </td>
+                                                        <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{tc.time ?? '-'}</td>
+                                                        <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{tc.memory ?? '-'}</td>
+                                                    </tr>
+                                                ))}
+                                                {/* Show if no test cases defined in testSuite for this category, or if testSuite not loaded */}
+                                                {(!currentCategoryInSuite || testCasesForThisCategory.length === 0) && actualResultsForThisCategory.length === 0 && (
                                                     <tr>
                                                         <td colSpan="4" style={{ padding: '0.5rem', textAlign: 'center', border: '1px solid #ccc', backgroundColor: '#fff'}}>
-                                                            {submitting || (testSuite && testSuite.categories.find(c => c.name === categoryName)?.test_cases.length > 0) ? 'テストケースを読み込んでいます...' : 'このカテゴリーのテストケースはありません。'}
+                                                            {submitting ? 'テストケースを読み込んでいます...' : 'このカテゴリーのテストケース結果はありません。'}
                                                         </td>
                                                     </tr>
                                                 )}

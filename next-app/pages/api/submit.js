@@ -10,17 +10,17 @@ export default async function handler(req, res) {
         return;
     }
 
-    // Set headers for SSE (Server-Sent Events)
+    // SSE 用ヘッダー設定
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
-    res.setHeader('Cache-Control', 'no-cache'); // Ensure no caching of this response
-    res.setHeader('Connection', 'keep-alive'); // Keep the connection open for streaming
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
 
-    // Helper function to flush the response buffer immediately
+    // すぐにフラッシュするヘルパー
     const flush = () => {
-        if (res.flush) res.flush(); // res.flush() is available on Node.js response objects
+        if (res.flush) res.flush();
     };
 
-    const { problemId, language, code } = req.body; // Extract parameters from the request body
+    const { problemId, language, code } = req.body;
     if (!problemId || !language || !code) {
         res.write(`data: ${JSON.stringify({ error: 'Missing parameters' })}\n\n`);
         flush();
@@ -28,10 +28,10 @@ export default async function handler(req, res) {
         return;
     }
 
-    // Create a temporary directory for the submission files
+    // 一時ディレクトリ作成
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'submission-'));
 
-    // Determine the solution filename based on the selected language
+    // 言語に応じたファイル名決定
     let filename = '';
     switch (language) {
         case 'python': filename = 'solution.py'; break;
@@ -45,24 +45,24 @@ export default async function handler(req, res) {
             res.end();
             return;
     }
-    const solutionPath = path.join(tmpDir, filename); // Path to the solution file in the temporary directory
-    fs.writeFileSync(solutionPath, code); // Write the submitted code to the solution file
+    const solutionPath = path.join(tmpDir, filename);
+    fs.writeFileSync(solutionPath, code);
 
-    // Load the problem's metadata (meta.json)
-    const metaPath = path.join(process.cwd(), 'problems', problemId, 'meta.json'); // Path to the meta.json file
+    // 問題 meta.json の読み込み
+    const metaPath = path.join(process.cwd(), 'problems', problemId, 'meta.json');
     if (!fs.existsSync(metaPath)) {
-        res.write(`data: ${JSON.stringify({ error: 'Problem meta not found' })}\n\n`); // Send error if meta.json is missing
+        res.write(`data: ${JSON.stringify({ error: 'Problem meta not found' })}\n\n`);
         flush();
         res.end();
         return;
     }
     const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
-    const categories = meta.test_case_categories; // Test case categories defined in meta.json
-    const timeout = meta.timeout || 2000; // Execution timeout in milliseconds, defaults to 2000ms
-    const memory_limit_kb = meta.memory_limit_kb; // Memory limit in KB
+    const categories = meta.test_case_categories;
+    const timeout = meta.timeout || 2000; // Keep timeout at problem level
+    const memory_limit_kb = meta.memory_limit_kb; // Keep memory limit at problem level
 
     if (!categories || !Array.isArray(categories)) {
-        res.write(`data: ${JSON.stringify({ type: 'error', message: 'Invalid problem metadata: test_case_categories not found or not an array' })}\n\n`); // Error for invalid metadata
+        res.write(`data: ${JSON.stringify({ type: 'error', message: 'Invalid problem metadata: test_case_categories not found or not an array' })}\n\n`);
         flush();
         fs.rmSync(tmpDir, { recursive: true, force: true });
         res.end();
@@ -86,198 +86,159 @@ export default async function handler(req, res) {
     const maxTotalPoints = categories.reduce((sum, cat) => sum + (cat.points || 0), 0);
     const categorySummaries = [];
 
-    try {
-        for (const category of categories) {
-            let categoryPointsAwarded = category.points || 0;
-            let allTestsInThisCategoryPassed = true;
+    for (const category of categories) {
+        let categoryPointsAwarded = category.points || 0; // Points for this category
+        let allTestsInThisCategoryPassed = true;
+        // const testCaseResultsInCategory = []; // Optional: if sending all results again in category_result
 
-            const testCasePromises = category.test_cases.map(async (testCase) => {
-                const testCaseName = path.basename(testCase.input);
-                // Consider using independent temporary directories or filenames for each test case for parallel execution without Docker.
-                // With Docker, each container gets its own isolated environment.
-                // The current approach writes to a shared `input.txt` in `tmpDir` before each Docker run.
-                // This is generally fine as Docker containers will copy the volume state at the time of `docker run`.
-                // For non-Docker parallel execution, unique input/output handling per test case would be critical.
+        for (const testCase of category.test_cases) {
+            const testCaseName = path.basename(testCase.input);
+            const inputFilePath = path.join(process.cwd(), testCase.input);
 
-                const inputFilePath = path.join(process.cwd(), testCase.input); // Path to the input file for the current test case
-                if (!fs.existsSync(inputFilePath)) {
-                    return {
-                        type: 'test_case_result',
-                        category_name: category.category_name,
-                        testCase: testCaseName,
-                        status: 'Error',
-                        message: 'Input file not found'
-                    };
-                }
-                const inputContent = fs.readFileSync(inputFilePath, 'utf8');
-                // Note: fs.writeFileSync should ideally be part of the isolated execution context
-                // or ensure unique input files if multiple non-containerized commands run in parallel on the same tmpDir.
-                // With Docker, each container gets its own /code/input.txt if we write it just before exec.
-                // For simplicity, we assume dockerCmd handles input via stdin or a uniquely named file if necessary.
-                // The current dockerCmd reads /code/input.txt, so we'll write it right before the exec.
-                // This part is tricky with parallel local writes. A better approach for non-Docker or shared tmpDir
-                // would be to pass input content directly or use uniquely named input files.
-                // Given the Docker setup, writing to a common 'input.txt' in the *host's* tmpDir just before
-                // *each* Docker execution is okay because each Docker container will copy the *current* state
-                // of the mapped volume.
+            if (!fs.existsSync(inputFilePath)) {
+                const errorResult = {
+                    type: 'test_case_result',
+                    category_name: category.category_name,
+                    testCase: testCaseName,
+                    status: 'Error',
+                    message: 'Input file not found'
+                };
+                res.write(`data: ${JSON.stringify(errorResult)}\n\n`);
+                flush();
+                allTestsInThisCategoryPassed = false;
+                // testCaseResultsInCategory.push(errorResult);
+                continue;
+            }
+            const inputContent = fs.readFileSync(inputFilePath, 'utf8');
+            fs.writeFileSync(path.join(tmpDir, 'input.txt'), inputContent);
 
-                // For parallel local execution without Docker, one would need per-test-case temp subdirectories.
-                // Create a uniquely named input file for this specific test case run if not using Docker's isolation.
-                // const localInputPath = path.join(tmpDir, `input_${testCaseName}.txt`);
-                // fs.writeFileSync(localInputPath, inputContent);
-                // For Docker, writing to a common 'input.txt' is fine as it's mapped per container.
-                fs.writeFileSync(path.join(tmpDir, 'input.txt'), inputContent); // Write current test case's input to input.txt
+            const dockerCmd = `docker run --rm -v ${tmpDir}:/code executor ${language} /code/${filename}`;
+            let currentTestCaseResult = {};
 
+            try {
+                let execResult = await execCommand(dockerCmd, timeout);
+                let output = '';
+                let execTimeMs = null;
+                let memUsage = null;
+                let testStatus = '';
 
-                const dockerCmd = `docker run --rm -v ${tmpDir}:/code executor ${language} /code/${filename}`; // Docker command to execute the solution
-                let currentTestCaseResult = {}; // Stores the result for the current test case
-
-                try {
-                    let execResult = await execCommand(dockerCmd, timeout); // Execute the command, `await` handles the Promise
-                    let output = ''; // Program's output
-                    let execTimeMs = null; // Execution time in milliseconds
-                    let memUsage = null;
-                    let testStatus = '';
-
-                    const combinedOutput = (execResult.stdout || '') + "\n" + (execResult.stderr || '');
-                    if (typeof combinedOutput === 'string' && combinedOutput.trim() !== '') {
-                        const lines = combinedOutput.trim().split('\n');
-                        const lastLine = lines[lines.length - 1];
-                        const timeRegex = /^TIME_MS:(\d+)\s+MEM:(\d+)$/;
-                        const match = lastLine.match(timeRegex);
-                        if (match) {
-                            execTimeMs = match[1]; // Extract execution time
-                            memUsage = match[2];   // Extract memory usage
-                            // If TLE, the output might be incomplete, but metrics are still valid
-                            if (execResult.tle) {
-                                output = lines.slice(0, -1).join('\n').trim(); // Output before the metrics line
-                            } else {
-                                // For non-TLE, the actual program output is everything before the metrics line
-                                output = lines.slice(0, -1).join('\n').trim();
-                            }
-                        } else {
-                             // No metrics line found, output is the whole combined output
+                const combinedOutput = (execResult.stdout || '') + "\n" + (execResult.stderr || '');
+                if (typeof combinedOutput === 'string' && combinedOutput.trim() !== '') {
+                    const lines = combinedOutput.trim().split('\n');
+                    const lastLine = lines[lines.length - 1];
+                    const timeRegex = /^TIME_MS:(\d+)\s+MEM:(\d+)$/;
+                    const match = lastLine.match(timeRegex);
+                    if (match) {
+                        execTimeMs = match[1];
+                        memUsage = match[2];
+                        if (execResult.tle) {
+                            output = lines.slice(0, -1).join('\n').trim();
+                        }
+                    } else {
+                        if(execResult.tle){
                             output = combinedOutput.trim();
                         }
                     }
+                }
 
+                if (execResult.tle) {
+                    testStatus = 'TLE';
+                    if (output === '' && typeof combinedOutput === 'string') output = combinedOutput.trim();
+                } else {
+                    output = execResult; // execResult is a string here
+                    const lines = output.trim().split('\n');
+                    const lastLine = lines[lines.length - 1];
+                    const timeRegex = /^TIME_MS:(\d+)\s+MEM:(\d+)$/;
+                    const match = lastLine.match(timeRegex);
+                    if (match) {
+                        execTimeMs = match[1];
+                        memUsage = match[2];
+                        lines.pop();
+                        output = lines.join('\n').trim();
+                    }
 
-                    if (execResult.tle) {
-                        testStatus = 'TLE'; // Time Limit Exceeded
-                        // Output might already be set if metrics were present despite TLE
-                        if (output === '' && typeof combinedOutput === 'string') output = combinedOutput.trim();
-
+                    if (memory_limit_kb && memUsage && parseInt(memUsage, 10) > memory_limit_kb) {
+                        testStatus = 'MLE';
                     } else {
-                        // Output was already processed if metrics line was present
-                        // If no metrics line, output is already `combinedOutput.trim()`
-
-                        if (memory_limit_kb && memUsage && parseInt(memUsage, 10) > memory_limit_kb) {
-                            testStatus = 'MLE'; // Memory Limit Exceeded
+                        const expectedOutputPath = path.join(process.cwd(), testCase.output);
+                        if (!fs.existsSync(expectedOutputPath)) {
+                            testStatus = 'Error';
+                            currentTestCaseResult.message = 'Expected output file not found';
                         } else {
-                            const expectedOutputPath = path.join(process.cwd(), testCase.output);
-                            if (!fs.existsSync(expectedOutputPath)) {
-                                testStatus = 'Error';
-                                currentTestCaseResult.message = 'Expected output file not found';
+                            const expectedOutput = fs.readFileSync(expectedOutputPath, 'utf8').trim();
+                            if (output.trim() === expectedOutput) {
+                                testStatus = 'Accepted';
                             } else {
-                                const expectedOutput = fs.readFileSync(expectedOutputPath, 'utf8').trim();
-                                if (output.trim() === expectedOutput) {
-                                    testStatus = 'Accepted';
-                                } else {
-                                    testStatus = 'Wrong Answer';
-                                    currentTestCaseResult.expected = expectedOutput;
-                                }
+                                testStatus = 'Wrong Answer';
+                                currentTestCaseResult.expected = expectedOutput;
                             }
                         }
                     }
-
-                    currentTestCaseResult = {
-                        ...currentTestCaseResult,
-                        type: 'test_case_result',
-                        category_name: category.category_name,
-                        testCase: testCaseName,
-                        status: testStatus,
-                        time: execTimeMs,
-                        memory: memUsage,
-                        got: output
-                    };
-
-                    if (testStatus === 'TLE') {
-                        currentTestCaseResult.signal = execResult.signal;
-                        currentTestCaseResult.killed = execResult.killed; // Store kill signal info for TLE
-                    }
-
-                } catch (err) { // Catch errors from execCommand or other issues during test case execution
-                    currentTestCaseResult = {
-                        type: 'test_case_result',
-                        category_name: category.category_name,
-                        testCase: testCaseName,
-                        status: 'Error',
-                        message: err.toString() // Provide a more detailed error message
-                    };
                 }
-                return currentTestCaseResult; // Return the result for this test case
-            });
 
-            // Wait for all test cases in the current category to complete
-            const results = await Promise.all(testCasePromises.map(p => p.catch(e => {
-                // This catch block handles unexpected errors in the promise construction or logic within testCasePromises.map,
-                // not typically errors from execCommand itself (which are handled and resolved).
-                console.error("Unexpected error in test case promise:", e); // Log the error server-side
-                return { // Return a structured error object for the client
+                currentTestCaseResult = {
+                    ...currentTestCaseResult,
                     type: 'test_case_result',
-                    // category_name and testCase might not be available if the error is very early
-                    status: 'Error',
-                    message: 'An unexpected server error occurred while processing the test case.'
+                    category_name: category.category_name,
+                    testCase: testCaseName,
+                    status: testStatus,
+                    time: execTimeMs,
+                    memory: memUsage,
+                    got: output // Always include 'got' for WA, TLE, MLE, and even Accepted if desired
                 };
-            })));
 
-            // Send results for each test case in the category
-            for (const result of results) {
-                // Ensure category_name and testCase are present, especially for errors caught by Promise.all.catch
-                const originalTestCase = category.test_cases[results.indexOf(result)]; // Assumes results maintain order
-                if (!result.category_name) result.category_name = category.category_name;
-                if (!result.testCase) result.testCase = path.basename(originalTestCase.input);
-
-                res.write(`data: ${JSON.stringify(result)}\n\n`); // Send test case result as SSE
-                flush();
-                if (result.status !== 'Accepted') {
-                    allTestsInThisCategoryPassed = false;
+                if (testStatus === 'TLE') {
+                    currentTestCaseResult.signal = execResult.signal;
+                    currentTestCaseResult.killed = execResult.killed;
                 }
+                // 'expected' is added for WA inside the logic block
+                // 'message' is added for Error inside the logic block or catch block
+
+            } catch (err) { // Catch errors from execCommand or other issues
+                currentTestCaseResult = {
+                    type: 'test_case_result',
+                    category_name: category.category_name,
+                    testCase: testCaseName,
+                    status: 'Error',
+                    message: err.toString()
+                };
             }
 
-            if (!allTestsInThisCategoryPassed) {
-                categoryPointsAwarded = 0;
-            }
-            totalPointsEarned += categoryPointsAwarded;
-
-            const categoryResultEvent = {
-                type: 'category_result',
-                category_name: category.category_name,
-                category_points_earned: categoryPointsAwarded,
-                category_max_points: category.points || 0,
-                all_tests_in_category_passed: allTestsInThisCategoryPassed,
-            };
-            res.write(`data: ${JSON.stringify(categoryResultEvent)}\n\n`);
+            res.write(`data: ${JSON.stringify(currentTestCaseResult)}\n\n`);
             flush();
+            // testCaseResultsInCategory.push(currentTestCaseResult);
 
-            categorySummaries.push({
-                category_name: category.category_name,
-                points_earned: categoryPointsAwarded,
-            max_points: category.points || 0 // Max points for this category
-            });
-    } // End of loop through categories
-    } catch (error) {
-        // Catch any unexpected errors during the main processing loop (e.g., issues not caught by individual test case catches)
-        console.error("Error during test execution:", error); // Log the error server-side
-        res.write(`data: ${JSON.stringify({ type: 'error', message: `Server error during execution: ${error.message}` })}\n\n`); // Send error to client
+            if (currentTestCaseResult.status !== 'Accepted') {
+                allTestsInThisCategoryPassed = false;
+            }
+        } // End of test cases loop for a category
+
+        if (!allTestsInThisCategoryPassed) {
+            categoryPointsAwarded = 0;
+        }
+        totalPointsEarned += categoryPointsAwarded;
+
+        const categoryResultEvent = {
+            type: 'category_result',
+            category_name: category.category_name,
+            category_points_earned: categoryPointsAwarded,
+            category_max_points: category.points || 0,
+            all_tests_in_category_passed: allTestsInThisCategoryPassed,
+            // test_case_results_in_category: testCaseResultsInCategory // Optional
+        };
+        res.write(`data: ${JSON.stringify(categoryResultEvent)}\n\n`);
         flush();
-        // Consider whether final_result should still be sent or if res.end() is sufficient here
-    } finally {
-        // Cleanup: Remove the temporary directory
-        fs.rmSync(tmpDir, { recursive: true, force: true });
 
-        // Send the final overall result
-        const finalResultEvent = {
+        categorySummaries.push({
+            category_name: category.category_name,
+            points_earned: categoryPointsAwarded,
+            max_points: category.points || 0
+        });
+    } // End of categories loop
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+
+    const finalResultEvent = {
         type: 'final_result',
         total_points_earned: totalPointsEarned,
         max_total_points: maxTotalPoints,
@@ -288,28 +249,27 @@ export default async function handler(req, res) {
     res.end();
 }
 
-// Promisified version of child_process.exec with timeout handling
 function execCommand(cmd, timeout) {
     return new Promise((resolve, reject) => {
         exec(cmd, { timeout: timeout }, (error, stdout, stderr) => {
             if (error) {
-                // Check for Time Limit Exceeded (TLE) conditions
-                if (error.signal === 'SIGTERM' || error.code === 'ETIMEDOUT' || error.killed) {
-                    // For TLE, resolve with details including any output produced before termination
+                // Check for TLE conditions
+                if (error.signal === 'SIGTERM' || error.code === 'ETIMEDOUT') {
+                    // For TLE, we still want to capture any stdout/stderr produced
                     resolve({
-                        tle: true, // Indicate TLE
+                        tle: true,
                         killed: error.killed,
                         signal: error.signal,
-                        stdout: stdout || '', // Capture any stdout
-                        stderr: stderr || ''  // Capture any stderr
+                        stdout: stdout || '',
+                        stderr: stderr || ''
                     });
                 } else {
-                    // For other execution errors, reject the promise
+                    // For other errors, reject as before
                     reject(stderr || error.message);
                 }
             } else {
-                // On successful execution (exit code 0)
-                resolve((stdout || '') + "\n" + (stderr || '')); // Combine stdout and stderr
+                // Success case
+                resolve((stdout || '') + "\n" + (stderr || ''));
             }
         });
     });
