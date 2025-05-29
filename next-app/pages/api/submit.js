@@ -288,7 +288,6 @@ export default async function handler(req, res) {
     res.end();
 }
 
-function execCommand(cmd, timeout) {
 // Promisified version of child_process.exec with timeout handling
 function execCommand(cmd, timeout) {
     return new Promise((resolve, reject) => {
