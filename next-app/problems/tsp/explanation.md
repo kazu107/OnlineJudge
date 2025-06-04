@@ -84,3 +84,10 @@ if __name__ == "__main__":
 `calculate_total_distance`関数は、経路が都市の座標リストに対する0-indexedのインデックスリストとして渡されることを想定しています。
 `solve_tsp`関数内で、`permutations`で得られた0-indexedの都市リスト `p` をもとに、始点と終点（都市0）を含む0-indexedの経路 `current_path_0_indexed` を作成し、距離計算後、評価スクリプトへの出力用に1-indexedの `best_path_for_evaluator` を作成・更新します。
 ```
+
+このリポジトリでは、カスタム評価を行う際に `meta.json` の `custom_evaluator_options`
+で使用する Docker イメージや実行コマンドを指定できます。デフォルトでは Python 用
+の `python:3.11-slim` イメージと
+`sh -c \"python {evaluator_path} {testcase_path} < {user_output_path}\"`
+が使われますが、`docker_image` と `command_template` を変更することで、任意の言語や
+スクリプトに対応した評価を簡単に追加できます。

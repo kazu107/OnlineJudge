@@ -4,7 +4,10 @@
   "memory_limit_kb": 256000,
   "evaluation_mode": "standard",
   "custom_evaluator_options": {
-    "evaluator_script": null
+    "evaluator_script": null,
+    "test_case_data_path_template": null,
+    "docker_image": null,
+    "command_template": null
   },
   "test_case_categories": [
     {
