@@ -9,6 +9,10 @@ import { exec } from 'child_process';
 import fs   from 'fs';
 import path from 'path';
 import os   from 'os';
+import { fileURLToPath } from 'url';
+
+// __dirname is not defined in ES module scope; recreate it for compatibility
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /* ---------- 共通ヘルパ ---------- */
 
