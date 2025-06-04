@@ -98,9 +98,9 @@ async function runTest({
         const killer = setTimeout(() => {
             /* child がもう閉じていれば何もしない */
             if (child.killed || child.exitCode !== null) return;
-               timedOut = true;
-               exec(`docker kill ${cname}`, () => {});
-               child.kill('SIGKILL');
+            timedOut = true;
+            exec(`docker kill ${cname}`, () => {});
+            child.kill('SIGKILL');
         }, timeout * 4);
     });
 
@@ -124,23 +124,13 @@ async function runTest({
             ));
         if (!evHost||!tcDataHost){ status='Error'; msg='Evaluator or test-case data file missing'; }
         else {
-            const scriptName = path.basename(evHost);
-            fs.copyFileSync(evHost,     path.join(tcDir, scriptName));
+            fs.copyFileSync(evHost,     path.join(tcDir,'evaluator.py'));
             fs.copyFileSync(tcDataHost, path.join(tcDir,'tc.txt'));
             fs.writeFileSync(path.join(tcDir,'user.txt'), output + '\n');
 
-            const dockerImage = custom_opts.docker_image || 'python:3.11-slim';
-            const cmdTemplate = custom_opts.command_template ||
-                'python {evaluator_path} {testcase_path} < {user_output_path}';
-
-            const insideCmd = cmdTemplate
-                .replace('{evaluator_path}', `/w/${scriptName}`)
-                .replace('{testcase_path}', '/w/tc.txt')
-                .replace('{user_output_path}', '/w/user.txt');
-
             const evalCmd =
-                `docker run --rm -i -v "${toDockerPath(tcDir)}":/w ${dockerImage} ` +
-                insideCmd;
+                `docker run --rm -i -v "${toDockerPath(tcDir)}":/w python:3.11-slim ` +
+                `python /w/evaluator.py /w/tc.txt < "${toDockerPath(path.join(tcDir,'user.txt'))}"`;
             try {
                 const evOut = await execCommand(evalCmd);
                 const l = (evOut.stdout||'').trim().split('\n');

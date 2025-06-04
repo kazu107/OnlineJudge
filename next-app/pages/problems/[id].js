@@ -162,7 +162,7 @@ export default function ProblemPage({ id, statementContent, explanationContent, 
                             } else if (event.error) { // Handle backend error messages
                                 console.error('Backend error event:', event.error);
                                 // Ensure error state is clear and doesn't carry over old success values
-                                setFinalResult({ error: event.error, total_earned: undefined, max_total: undefined, final_raw_distance: undefined }); 
+                                setFinalResult({ error: event.error, total_earned: undefined, max_total: undefined, final_raw_distance: undefined });
                                 setSubmitting(false);
                             }
                         } catch (err) {
@@ -277,9 +277,9 @@ export default function ProblemPage({ id, statementContent, explanationContent, 
                             {finalResult && finalResult.total_earned !== undefined && !finalResult.error && (
                                 <div style={{ margin: '1rem 0', padding: '1rem', backgroundColor: '#e6f7ff', border: '1px solid #91d5ff', borderRadius: '5px' }}>
                                     <h3>
-                                        {(isTspProblem && finalResult.final_raw_distance !== undefined && finalResult.final_raw_distance !== null) ? 
-                                            `総距離: ${finalResult.final_raw_distance.toFixed(4)} (スコア: ${finalResult.total_earned})` 
-                                            : 
+                                        {(isTspProblem && finalResult.final_raw_distance !== undefined && finalResult.final_raw_distance !== null) ?
+                                            `総距離: ${finalResult.final_raw_distance.toFixed(4)} (スコア: ${finalResult.total_earned})`
+                                            :
                                             `総合得点: ${finalResult.total_earned} / ${finalResult.max_total}`
                                         }
                                     </h3>
