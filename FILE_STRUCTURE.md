@@ -33,7 +33,7 @@
 | --- | --- |
 | `pages/` | Next.js のページおよび API ルート。`pages/api` 以下に実行・提出用 API が実装されています。 |
 | `problems/` | 各問題フォルダ。`statement.md` やテストケースなどを含みます。 |
-| `evaluators/` | カスタム評価用スクリプトを配置する場所。例として `tsp_evaluator.py` があります。 |
+| `evaluators/` | カスタム評価用スクリプトを配置する場所。任意の言語で記述でき、`meta.json` の `custom_evaluator_options` で使用する Docker イメージや実行コマンドを指定します。例として `tsp_evaluator.py` があります。 |
 | `test_tle_mle.js` | TLE/MLE テスト用のスクリプト。バックエンド API を直接呼び出して動作確認を行います。 |
 | `package.json` | Next.js アプリの依存設定。 |
 
@@ -59,7 +59,7 @@ problem1/
 └── tests/          # 入力・出力ファイル群
 ```
 
-`tsp/` も同様の構成で、`evaluators/` 内のスクリプトを用いたカスタム評価問題の例です。
+`tsp/` や `knapsack/` も同様の構成で、`evaluators/` 内のスクリプトを用いたカスタム評価問題の例です。
 
 ---
 
