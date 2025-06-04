@@ -34,3 +34,12 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## カスタム評価スクリプト
+
+`next-app/evaluators/` に評価スクリプトを追加し、各問題の `meta.json` で
+`custom_evaluator_options` を設定することで任意の評価ロジックを利用できます。
+`docker_image` と `command_template` を指定することで Python 以外の言語も使用
+可能です。
+サンプルとして `evaluators/tsp_evaluator.py` や `evaluators/knapsack_evaluator.py`
+が含まれています。

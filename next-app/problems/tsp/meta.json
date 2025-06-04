@@ -5,7 +5,9 @@
     "evaluation_mode": "custom",
     "custom_evaluator_options": {
       "evaluator_script": "evaluators/tsp_evaluator.py",
-      "test_case_data_path_template": "problems/tsp/tests/input/{test_case_name}.txt"
+      "test_case_data_path_template": "problems/tsp/tests/input/{test_case_name}.txt",
+      "docker_image": "python:3.11-slim",
+      "command_template": "python {evaluator_path} {testcase_path} < {user_output_path}"
     },
     "test_case_categories": [
           {

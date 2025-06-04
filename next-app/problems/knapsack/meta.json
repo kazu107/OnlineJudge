@@ -1,0 +1,40 @@
+{
+    "problem_id": "knapsack",
+    "timeout": 2000,
+    "memory_limit_kb": 256000,
+    "evaluation_mode": "custom",
+    "custom_evaluator_options": {
+        "evaluator_script": "evaluators/knapsack_evaluator.py",
+        "test_case_data_path_template": "problems/knapsack/tests/input/{test_case_name}.txt",
+        "docker_image": "python:3.11-slim",
+        "command_template": "python {evaluator_path} {testcase_path} < {user_output_path}"
+    },
+    "test_case_categories": [
+        {
+            "category_name": "Sample Cases",
+            "points": 1000000000,
+            "test_cases": [
+                {
+                    "input": "problems/knapsack/tests/input/sample1.txt",
+                    "output": "problems/knapsack/tests/output/sample1_dummy_output.txt"
+                },
+                {
+                    "input": "problems/knapsack/tests/input/sample2.txt",
+                    "output": "problems/knapsack/tests/output/sample2_dummy_output.txt"
+                },
+                {
+                    "input": "problems/knapsack/tests/input/sample3.txt",
+                    "output": "problems/knapsack/tests/output/sample3_dummy_output.txt"
+                },
+                {
+                    "input": "problems/knapsack/tests/input/sample4.txt",
+                    "output": "problems/knapsack/tests/output/sample4_dummy_output.txt"
+                },
+                {
+                    "input": "problems/knapsack/tests/input/sample5.txt",
+                    "output": "problems/knapsack/tests/output/sample5_dummy_output.txt"
+                }
+            ]
+        }
+    ]
+}
